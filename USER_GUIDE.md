@@ -995,3 +995,4 @@ The dashboard provides a comprehensive overview of your business:
 ---
 
 *This user guide is regularly updated to reflect new features and improvements.*
+

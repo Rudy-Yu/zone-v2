@@ -512,7 +512,7 @@ const Marketing = () => {
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center">
-                <CardTitle>Marketing Automation</CardTitle>
+              <CardTitle>Marketing Automation</CardTitle>
                 <Dialog open={isAutomationOpen} onOpenChange={setIsAutomationOpen}>
                   <DialogTrigger asChild>
                     <Button className="bg-red-500 hover:bg-red-600 text-white">
@@ -680,7 +680,7 @@ const Marketing = () => {
                           </Button>
                           <Button size="sm" variant="outline">
                             <Bot className="h-4 w-4" />
-                          </Button>
+              </Button>
                         </div>
                       </TableCell>
                     </TableRow>

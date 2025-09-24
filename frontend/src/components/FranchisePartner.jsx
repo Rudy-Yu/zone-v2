@@ -637,3 +637,4 @@ const FranchisePartner = () => {
 export default FranchisePartner;
 
 
+

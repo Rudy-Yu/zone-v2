@@ -186,10 +186,10 @@ const Manufacturing = () => {
         <div className="flex gap-2">
           <Dialog open={isCreateOrderOpen} onOpenChange={setIsCreateOrderOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-red-500 hover:bg-red-600 text-white">
-                <Factory className="h-4 w-4 mr-2" />
-                Buat Order Produksi
-              </Button>
+        <Button className="bg-red-500 hover:bg-red-600 text-white">
+          <Factory className="h-4 w-4 mr-2" />
+          Buat Order Produksi
+        </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl">
               <DialogHeader>

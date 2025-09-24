@@ -63,19 +63,19 @@ const ExcelProcessor = () => {
                 <p className="text-gray-600 mb-4">
                   Drag and drop your Excel file here, or click to browse
                 </p>
-                <input
-                  type="file"
-                  accept=".xlsx,.xls,.csv"
-                  onChange={handleFileUpload}
-                  className="hidden"
+          <input
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            onChange={handleFileUpload}
+            className="hidden"
                   id="excel-upload"
                 />
                 <Button asChild>
                   <label htmlFor="excel-upload" className="cursor-pointer">
-                    <Upload className="h-4 w-4 mr-2" />
+            <Upload className="h-4 w-4 mr-2" />
                     Choose File
                   </label>
-                </Button>
+          </Button>
               </div>
               
               {uploadedFile && (
@@ -89,8 +89,8 @@ const ExcelProcessor = () => {
                   </p>
                 </div>
               )}
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
         </TabsContent>
 
         <TabsContent value="preview" className="space-y-6">
@@ -131,7 +131,7 @@ const ExcelProcessor = () => {
                   <FileSpreadsheet className="h-16 w-16 mx-auto mb-4 opacity-50" />
                   <p className="text-lg font-medium">No data to preview</p>
                   <p className="text-sm">Upload an Excel file to see the data preview</p>
-                </div>
+              </div>
               )}
             </CardContent>
           </Card>
@@ -178,8 +178,8 @@ const ExcelProcessor = () => {
                     <div className="text-2xl font-bold text-purple-600">94.2%</div>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
           </div>
         </TabsContent>
       </Tabs>

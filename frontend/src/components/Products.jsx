@@ -70,13 +70,7 @@ const Products = () => {
       price: 'Rp 3.500.000',
       status: 'Active'
     }
-  ];
-
-  const getStockStatus = (stock, minStock) => {
-    if (stock === 0) return { status: 'Out of Stock', color: 'bg-red-100 text-red-800' };
-    if (stock <= minStock) return { status: 'Low Stock', color: 'bg-yellow-100 text-yellow-800' };
-    return { status: 'Active', color: 'bg-green-100 text-green-800' };
-  };
+  ]);
 
   const [newProduct, setNewProduct] = useState({
     name: '',
@@ -136,6 +130,12 @@ const Products = () => {
 
   const handleDeleteProduct = (productId) => {
     setProducts(products.filter(p => p.id !== productId));
+  };
+
+  const getStockStatus = (stock, minStock) => {
+    if (stock === 0) return { status: 'Out of Stock', color: 'bg-red-100 text-red-800' };
+    if (stock <= minStock) return { status: 'Low Stock', color: 'bg-yellow-100 text-yellow-800' };
+    return { status: 'Active', color: 'bg-green-100 text-green-800' };
   };
 
   const filteredProducts = products.filter(product =>

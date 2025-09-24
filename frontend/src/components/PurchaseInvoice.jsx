@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
-import { Plus, Search, Edit, Trash2, Eye, Receipt, Building, Calendar, DollarSign, CreditCard } from 'lucide-react';
+import { Plus, Search, FileText, Edit, Trash2, Eye, Download, Filter } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { 
   Table, 
   TableBody, 
@@ -23,6 +22,8 @@ import {
   DialogTrigger,
 } from './ui/dialog';
 import { Label } from './ui/label';
+import { Textarea } from './ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 const PurchaseInvoice = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -31,131 +32,77 @@ const PurchaseInvoice = () => {
   
   const [purchaseInvoices, setPurchaseInvoices] = useState([
     {
-      id: 'PINV-001',
-      invoiceNumber: 'PINV-2024-001',
-      vendorId: 'VEN-001',
-      vendorName: 'PT. Supplier ABC',
-      invoiceDate: '2024-01-20',
-      dueDate: '2024-02-19',
+      id: 'PI-001',
+      invoiceNumber: 'INV-2024-001',
+      vendor: 'PT. Supplier ABC',
+      invoiceDate: '2024-01-15',
+      dueDate: '2024-02-15',
+      amount: 25000000,
+      paidAmount: 0,
       status: 'Pending',
-      totalAmount: 75000000,
-      paidAmount: 0,
-      items: [
-        { productId: 'PRD-001', productName: 'Laptop Gaming', quantity: 5, unitPrice: 15000000, total: 75000000 }
-      ],
-      purchaseOrderId: 'PO-001',
-      createdBy: 'John Purchasing',
-      notes: 'Payment due in 30 days',
-      createdAt: '2024-01-20 10:30:00'
+      description: 'Purchase of raw materials'
     },
     {
-      id: 'PINV-002',
-      invoiceNumber: 'PINV-2024-002',
-      vendorId: 'VEN-002',
-      vendorName: 'CV. Distributor XYZ',
-      invoiceDate: '2024-01-19',
-      dueDate: '2024-02-03',
-      status: 'Paid',
-      totalAmount: 48000000,
-      paidAmount: 48000000,
-      items: [
-        { productId: 'PRD-003', productName: 'Keyboard Mechanical', quantity: 20, unitPrice: 1200000, total: 24000000 },
-        { productId: 'PRD-004', productName: 'Monitor 27"', quantity: 12, unitPrice: 2000000, total: 24000000 }
-      ],
-      purchaseOrderId: 'PO-002',
-      createdBy: 'Jane Purchasing',
-      notes: 'Paid via bank transfer',
-      createdAt: '2024-01-19 14:15:00',
-      paidDate: '2024-01-25 14:30:00'
-    },
-    {
-      id: 'PINV-003',
-      invoiceNumber: 'PINV-2024-003',
-      vendorId: 'VEN-003',
-      vendorName: 'PT. Trading DEF',
-      invoiceDate: '2024-01-18',
-      dueDate: '2024-01-18',
-      status: 'Paid',
-      totalAmount: 30000000,
-      paidAmount: 30000000,
-      items: [
-        { productId: 'PRD-002', productName: 'Mouse Wireless', quantity: 50, unitPrice: 250000, total: 12500000 },
-        { productId: 'PRD-005', productName: 'Headset Gaming', quantity: 25, unitPrice: 700000, total: 17500000 }
-      ],
-      purchaseOrderId: 'PO-003',
-      createdBy: 'Bob Purchasing',
-      notes: 'COD payment',
-      createdAt: '2024-01-18 09:45:00',
-      paidDate: '2024-01-18 15:20:00'
-    },
-    {
-      id: 'PINV-004',
-      invoiceNumber: 'PINV-2024-004',
-      vendorId: 'VEN-001',
-      vendorName: 'PT. Supplier ABC',
-      invoiceDate: '2024-01-17',
+      id: 'PI-002',
+      invoiceNumber: 'INV-2024-002',
+      vendor: 'CV. Distributor XYZ',
+      invoiceDate: '2024-01-16',
       dueDate: '2024-02-16',
-      status: 'Overdue',
-      totalAmount: 20000000,
-      paidAmount: 0,
-      items: [
-        { productId: 'PRD-006', productName: 'Webcam HD', quantity: 10, unitPrice: 2000000, total: 20000000 }
-      ],
-      purchaseOrderId: 'PO-004',
-      createdBy: 'Alice Purchasing',
-      notes: 'Payment overdue',
-      createdAt: '2024-01-17 16:20:00'
+      amount: 15000000,
+      paidAmount: 15000000,
+      status: 'Paid',
+      description: 'Office supplies'
+    },
+    {
+      id: 'PI-003',
+      invoiceNumber: 'INV-2024-003',
+      vendor: 'Toko Elektronik Maju',
+      invoiceDate: '2024-01-17',
+      dueDate: '2024-02-17',
+      amount: 35000000,
+      paidAmount: 17500000,
+      status: 'Partial',
+      description: 'IT Equipment'
     }
   ]);
 
   const [newInvoice, setNewInvoice] = useState({
-    vendorId: '',
-    vendorName: '',
-    invoiceDate: new Date().toISOString().split('T')[0],
+    invoiceNumber: '',
+    vendor: '',
+    invoiceDate: '',
     dueDate: '',
-    purchaseOrderId: '',
-    items: [],
-    notes: ''
+    amount: '',
+    paidAmount: '',
+    description: '',
+    status: 'Pending'
   });
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'Draft': return 'bg-gray-100 text-gray-800';
-      case 'Pending': return 'bg-yellow-100 text-yellow-800';
-      case 'Paid': return 'bg-green-100 text-green-800';
-      case 'Overdue': return 'bg-red-100 text-red-800';
-      case 'Partial': return 'bg-blue-100 text-blue-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const filteredInvoices = purchaseInvoices.filter(invoice =>
-    invoice.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    invoice.vendorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    invoice.status.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const vendors = [
+    'PT. Supplier ABC',
+    'CV. Distributor XYZ',
+    'Toko Elektronik Maju',
+    'PT. Bahan Baku Indonesia',
+    'CV. Peralatan Kantor'
+  ];
 
   const handleAddInvoice = () => {
     const invoice = {
-      id: `PINV-${String(purchaseInvoices.length + 1).padStart(3, '0')}`,
-      invoiceNumber: `PINV-2024-${String(purchaseInvoices.length + 1).padStart(3, '0')}`,
+      id: `PI-${String(purchaseInvoices.length + 1).padStart(3, '0')}`,
       ...newInvoice,
-      status: 'Draft',
-      totalAmount: newInvoice.items.reduce((sum, item) => sum + item.total, 0),
-      paidAmount: 0,
-      createdBy: 'Current User',
-      createdAt: new Date().toISOString()
+      amount: parseInt(newInvoice.amount),
+      paidAmount: parseInt(newInvoice.paidAmount) || 0
     };
     
     setPurchaseInvoices([...purchaseInvoices, invoice]);
     setNewInvoice({
-      vendorId: '',
-      vendorName: '',
-      invoiceDate: new Date().toISOString().split('T')[0],
+      invoiceNumber: '',
+      vendor: '',
+      invoiceDate: '',
       dueDate: '',
-      purchaseOrderId: '',
-      items: [],
-      notes: ''
+      amount: '',
+      paidAmount: '',
+      description: '',
+      status: 'Pending'
     });
     setIsAddDialogOpen(false);
   };
@@ -166,79 +113,79 @@ const PurchaseInvoice = () => {
     setIsAddDialogOpen(true);
   };
 
-  const handleUpdateInvoice = () => {
-    setPurchaseInvoices(purchaseInvoices.map(invoice => 
-      invoice.id === editingInvoice.id ? { ...invoice, ...newInvoice, totalAmount: newInvoice.items.reduce((sum, item) => sum + item.total, 0) } : invoice
-    ));
-    setEditingInvoice(null);
-    setIsAddDialogOpen(false);
+  const handleDeleteInvoice = (invoiceId) => {
+    setPurchaseInvoices(purchaseInvoices.filter(p => p.id !== invoiceId));
   };
 
-  const handleDeleteInvoice = (invoiceId) => {
-    if (confirm('Apakah Anda yakin ingin menghapus invoice pembelian ini?')) {
-      setPurchaseInvoices(purchaseInvoices.filter(invoice => invoice.id !== invoiceId));
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'Paid': return 'bg-green-100 text-green-800';
+      case 'Partial': return 'bg-yellow-100 text-yellow-800';
+      case 'Pending': return 'bg-red-100 text-red-800';
+      case 'Overdue': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
   };
 
-  const updateInvoiceStatus = (invoiceId, newStatus) => {
-    const updatedInvoices = purchaseInvoices.map(invoice => {
-      if (invoice.id === invoiceId) {
-        const updated = { ...invoice, status: newStatus };
-        if (newStatus === 'Paid') {
-          updated.paidAmount = invoice.totalAmount;
-          updated.paidDate = new Date().toISOString();
-        }
-        return updated;
-      }
-      return invoice;
-    });
-    setPurchaseInvoices(updatedInvoices);
-  };
+  const filteredInvoices = purchaseInvoices.filter(invoice =>
+    invoice.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    invoice.vendor.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    invoice.status.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-  const markAsPaid = (invoiceId) => {
-    updateInvoiceStatus(invoiceId, 'Paid');
-  };
-
-  const markAsPending = (invoiceId) => {
-    updateInvoiceStatus(invoiceId, 'Pending');
-  };
+  const totalAmount = purchaseInvoices.reduce((sum, invoice) => sum + invoice.amount, 0);
+  const paidAmount = purchaseInvoices.reduce((sum, invoice) => sum + invoice.paidAmount, 0);
+  const pendingAmount = totalAmount - paidAmount;
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">Invoice Pembelian Management</h1>
-          <p className="text-gray-600">Kelola invoice pembelian dan tracking pembayaran</p>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">Purchase Invoice</h1>
+          <p className="text-gray-600">Kelola invoice pembelian dari vendor</p>
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
             <Button className="bg-red-500 hover:bg-red-600 text-white">
               <Plus className="h-4 w-4 mr-2" />
-              Buat Invoice Pembelian
+              Add Invoice
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-4xl">
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>
-                {editingInvoice ? 'Edit Invoice Pembelian' : 'Buat Invoice Pembelian Baru'}
-              </DialogTitle>
+              <DialogTitle>{editingInvoice ? 'Edit Purchase Invoice' : 'Add Purchase Invoice'}</DialogTitle>
               <DialogDescription>
-                {editingInvoice ? 'Update informasi invoice pembelian' : 'Masukkan informasi invoice pembelian baru'}
+                {editingInvoice ? 'Update invoice information' : 'Enter new purchase invoice details'}
               </DialogDescription>
             </DialogHeader>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="vendorName">Vendor *</Label>
+                <Label htmlFor="invoiceNumber">Invoice Number</Label>
                 <Input
-                  id="vendorName"
-                  value={newInvoice.vendorName}
-                  onChange={(e) => setNewInvoice({...newInvoice, vendorName: e.target.value})}
-                  placeholder="Nama vendor"
+                  id="invoiceNumber"
+                  value={newInvoice.invoiceNumber}
+                  onChange={(e) => setNewInvoice({...newInvoice, invoiceNumber: e.target.value})}
+                  placeholder="Enter invoice number"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="invoiceDate">Tanggal Invoice *</Label>
+                <Label htmlFor="vendor">Vendor</Label>
+                <Select value={newInvoice.vendor} onValueChange={(value) => setNewInvoice({...newInvoice, vendor: value})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select vendor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {vendors.map((vendor) => (
+                      <SelectItem key={vendor} value={vendor}>
+                        {vendor}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="invoiceDate">Invoice Date</Label>
                 <Input
                   id="invoiceDate"
                   type="date"
@@ -247,7 +194,7 @@ const PurchaseInvoice = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="dueDate">Due Date *</Label>
+                <Label htmlFor="dueDate">Due Date</Label>
                 <Input
                   id="dueDate"
                   type="date"
@@ -256,59 +203,42 @@ const PurchaseInvoice = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="purchaseOrderId">Purchase Order ID</Label>
+                <Label htmlFor="amount">Amount</Label>
                 <Input
-                  id="purchaseOrderId"
-                  value={newInvoice.purchaseOrderId}
-                  onChange={(e) => setNewInvoice({...newInvoice, purchaseOrderId: e.target.value})}
-                  placeholder="PO-2024-XXX"
+                  id="amount"
+                  type="number"
+                  value={newInvoice.amount}
+                  onChange={(e) => setNewInvoice({...newInvoice, amount: e.target.value})}
+                  placeholder="Enter amount"
                 />
               </div>
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="notes">Catatan</Label>
+              <div className="space-y-2">
+                <Label htmlFor="paidAmount">Paid Amount</Label>
                 <Input
-                  id="notes"
-                  value={newInvoice.notes}
-                  onChange={(e) => setNewInvoice({...newInvoice, notes: e.target.value})}
-                  placeholder="Catatan tambahan"
+                  id="paidAmount"
+                  type="number"
+                  value={newInvoice.paidAmount}
+                  onChange={(e) => setNewInvoice({...newInvoice, paidAmount: e.target.value})}
+                  placeholder="Enter paid amount"
+                />
+              </div>
+              <div className="col-span-2 space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  value={newInvoice.description}
+                  onChange={(e) => setNewInvoice({...newInvoice, description: e.target.value})}
+                  placeholder="Enter description"
+                  rows={3}
                 />
               </div>
             </div>
-            
-            {/* Invoice Items */}
-            <div className="mt-6">
-              <Label>Item Invoice</Label>
-              <div className="border rounded-lg p-4 mt-2">
-                <div className="text-sm text-gray-600 mb-4">Items akan ditambahkan melalui form terpisah</div>
-                {newInvoice.items.length > 0 ? (
-                  <div className="space-y-2">
-                    {newInvoice.items.map((item, index) => (
-                      <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                        <span>{item.productName} x {item.quantity}</span>
-                        <span>Rp {item.total.toLocaleString()}</span>
-                      </div>
-                    ))}
-                    <div className="font-bold text-right">
-                      Total: Rp {newInvoice.items.reduce((sum, item) => sum + item.total, 0).toLocaleString()}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-4 text-gray-500">
-                    Belum ada item dalam invoice ini
-                  </div>
-                )}
-              </div>
-            </div>
-            
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button 
-                onClick={editingInvoice ? handleUpdateInvoice : handleAddInvoice}
-                className="bg-red-500 hover:bg-red-600 text-white"
-              >
-                {editingInvoice ? 'Update Invoice' : 'Buat Invoice'}
+              <Button onClick={handleAddInvoice} className="bg-red-500 hover:bg-red-600 text-white">
+                {editingInvoice ? 'Update Invoice' : 'Add Invoice'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -321,7 +251,7 @@ const PurchaseInvoice = () => {
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="p-3 bg-blue-100 rounded-lg">
-                <Receipt className="h-6 w-6 text-blue-600" />
+                <FileText className="h-6 w-6 text-blue-600" />
               </div>
               <div>
                 <div className="text-sm text-gray-600">Total Invoices</div>
@@ -333,14 +263,12 @@ const PurchaseInvoice = () => {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-yellow-100 rounded-lg">
-                <Calendar className="h-6 w-6 text-yellow-600" />
+              <div className="p-3 bg-green-100 rounded-lg">
+                <FileText className="h-6 w-6 text-green-600" />
               </div>
               <div>
-                <div className="text-sm text-gray-600">Pending</div>
-                <div className="text-2xl font-bold text-yellow-600">
-                  {purchaseInvoices.filter(i => i.status === 'Pending').length}
-                </div>
+                <div className="text-sm text-gray-600">Total Amount</div>
+                <div className="text-2xl font-bold text-green-600">Rp {totalAmount.toLocaleString('id-ID')}</div>
               </div>
             </div>
           </CardContent>
@@ -348,14 +276,12 @@ const PurchaseInvoice = () => {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-green-100 rounded-lg">
-                <CreditCard className="h-6 w-6 text-green-600" />
+              <div className="p-3 bg-blue-100 rounded-lg">
+                <FileText className="h-6 w-6 text-blue-600" />
               </div>
               <div>
-                <div className="text-sm text-gray-600">Paid</div>
-                <div className="text-2xl font-bold text-green-600">
-                  {purchaseInvoices.filter(i => i.status === 'Paid').length}
-                </div>
+                <div className="text-sm text-gray-600">Paid Amount</div>
+                <div className="text-2xl font-bold text-blue-600">Rp {paidAmount.toLocaleString('id-ID')}</div>
               </div>
             </div>
           </CardContent>
@@ -364,13 +290,11 @@ const PurchaseInvoice = () => {
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="p-3 bg-red-100 rounded-lg">
-                <DollarSign className="h-6 w-6 text-red-600" />
+                <FileText className="h-6 w-6 text-red-600" />
               </div>
               <div>
-                <div className="text-sm text-gray-600">Overdue</div>
-                <div className="text-2xl font-bold text-red-600">
-                  {purchaseInvoices.filter(i => i.status === 'Overdue').length}
-                </div>
+                <div className="text-sm text-gray-600">Pending Amount</div>
+                <div className="text-2xl font-bold text-red-600">Rp {pendingAmount.toLocaleString('id-ID')}</div>
               </div>
             </div>
           </CardContent>
@@ -383,7 +307,7 @@ const PurchaseInvoice = () => {
           <div className="relative max-w-md">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input
-              placeholder="Cari invoice pembelian..."
+              placeholder="Search invoices..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
@@ -392,10 +316,10 @@ const PurchaseInvoice = () => {
         </CardContent>
       </Card>
 
-      {/* Purchase Invoices Table */}
+      {/* Invoices Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Daftar Invoice Pembelian</CardTitle>
+          <CardTitle>Purchase Invoices</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
@@ -405,10 +329,9 @@ const PurchaseInvoice = () => {
                 <TableHead>Vendor</TableHead>
                 <TableHead>Invoice Date</TableHead>
                 <TableHead>Due Date</TableHead>
+                <TableHead>Amount</TableHead>
+                <TableHead>Paid</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Total Amount</TableHead>
-                <TableHead>Paid Amount</TableHead>
-                <TableHead>PO Reference</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -416,67 +339,37 @@ const PurchaseInvoice = () => {
               {filteredInvoices.map((invoice) => (
                 <TableRow key={invoice.id} className="hover:bg-gray-50">
                   <TableCell className="font-medium">{invoice.invoiceNumber}</TableCell>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">{invoice.vendorName}</div>
-                      <div className="text-sm text-gray-500">{invoice.vendorId}</div>
-                    </div>
-                  </TableCell>
+                  <TableCell>{invoice.vendor}</TableCell>
                   <TableCell>{invoice.invoiceDate}</TableCell>
+                  <TableCell>{invoice.dueDate}</TableCell>
+                  <TableCell>Rp {invoice.amount.toLocaleString('id-ID')}</TableCell>
+                  <TableCell>Rp {invoice.paidAmount.toLocaleString('id-ID')}</TableCell>
                   <TableCell>
-                    <div className={new Date(invoice.dueDate) < new Date() && invoice.status !== 'Paid' ? 'text-red-600 font-medium' : ''}>
-                      {invoice.dueDate}
-                    </div>
+                    <Badge className={getStatusColor(invoice.status)}>
+                      {invoice.status}
+                    </Badge>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Badge className={getStatusColor(invoice.status)}>
-                        {invoice.status}
-                      </Badge>
-                      {invoice.status === 'Pending' && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => markAsPaid(invoice.id)}
-                        >
-                          Mark Paid
-                        </Button>
-                      )}
-                      {invoice.status === 'Paid' && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => markAsPending(invoice.id)}
-                        >
-                          Mark Pending
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="font-semibold">Rp {invoice.totalAmount.toLocaleString()}</TableCell>
-                  <TableCell>
-                    <div className={invoice.paidAmount === invoice.totalAmount ? 'text-green-600 font-medium' : 'text-gray-600'}>
-                      Rp {invoice.paidAmount.toLocaleString()}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-sm text-blue-600">{invoice.purchaseOrderId}</div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="sm">
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleEditInvoice(invoice)}>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleEditInvoice(invoice)}
+                      >
                         <Edit className="h-4 w-4" />
                       </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="text-red-600 hover:text-red-700"
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => handleDeleteInvoice(invoice.id)}
                       >
                         <Trash2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                      >
+                        <Eye className="h-4 w-4" />
                       </Button>
                     </div>
                   </TableCell>
@@ -491,5 +384,3 @@ const PurchaseInvoice = () => {
 };
 
 export default PurchaseInvoice;
-
-
