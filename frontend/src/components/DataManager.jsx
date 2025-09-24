@@ -14,7 +14,10 @@ import {
   Save,
   Eye,
   Grid,
-  BarChart3
+  BarChart3,
+  Code,
+  FileCode,
+  Monitor
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -89,6 +92,86 @@ const DataManager = () => {
   const [editingRecord, setEditingRecord] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
+  const [isModuleBuilderOpen, setIsModuleBuilderOpen] = useState(false);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [newModule, setNewModule] = useState({
+    name: '',
+    description: '',
+    type: '',
+    fields: []
+  });
+  const [editorCode, setEditorCode] = useState('');
+  const [editorLanguage, setEditorLanguage] = useState('javascript');
+
+  const handleCreateModule = () => {
+    const module = {
+      id: newModule.name.toLowerCase().replace(/\s+/g, '_'),
+      ...newModule,
+      data: [],
+      created: new Date().toISOString().split('T')[0],
+      records: 0
+    };
+    
+    setDataModules([...dataModules, module]);
+    setNewModule({
+      name: '',
+      description: '',
+      type: '',
+      fields: []
+    });
+    setIsModuleBuilderOpen(false);
+  };
+
+  const handleLaunchEditor = () => {
+    // Set default code based on selected module
+    if (selectedModule) {
+      setEditorCode(`// Module: ${selectedModule.name}
+// Description: ${selectedModule.description}
+
+const module = {
+  name: '${selectedModule.name}',
+  description: '${selectedModule.description}',
+  type: '${selectedModule.type}',
+  fields: ${JSON.stringify(selectedModule.fields, null, 2)},
+  data: ${JSON.stringify(selectedModule.data, null, 2)}
+};
+
+// Custom functions for this module
+function getModuleData() {
+  return module.data;
+}
+
+function addRecord(record) {
+  module.data.push(record);
+  return module.data;
+}
+
+function updateRecord(index, record) {
+  module.data[index] = record;
+  return module.data;
+}
+
+function deleteRecord(index) {
+  module.data.splice(index, 1);
+  return module.data;
+}
+
+// Export functions
+module.exports = {
+  getModuleData,
+  addRecord,
+  updateRecord,
+  deleteRecord
+};`);
+    }
+    setIsEditorOpen(true);
+  };
+
+  const handleSaveEditor = () => {
+    // Save editor code
+    console.log('Saving editor code:', editorCode);
+    setIsEditorOpen(false);
+  };
 
   // Simulate Excel import
   const handleExcelImport = (event) => {
@@ -287,9 +370,13 @@ const DataManager = () => {
             <Upload className="h-4 w-4 mr-2" />
             Import Excel
           </Button>
-          <Button className="bg-red-500 hover:bg-red-600 text-white" onClick={createNewModule}>
+          <Button className="bg-red-500 hover:bg-red-600 text-white" onClick={() => setIsModuleBuilderOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Buat Modul Baru
+          </Button>
+          <Button variant="outline" onClick={handleLaunchEditor}>
+            <Code className="h-4 w-4 mr-2" />
+            Launch Editor
           </Button>
         </div>
       </div>
@@ -555,6 +642,179 @@ const DataManager = () => {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Module Builder Dialog */}
+      <Dialog open={isModuleBuilderOpen} onOpenChange={setIsModuleBuilderOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Buat Module Baru</DialogTitle>
+            <DialogDescription>
+              Buat module data custom dengan field yang dapat dikonfigurasi.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="moduleName">Nama Module</Label>
+                <Input
+                  id="moduleName"
+                  value={newModule.name}
+                  onChange={(e) => setNewModule({...newModule, name: e.target.value})}
+                  placeholder="Masukkan nama module"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="moduleType">Tipe Module</Label>
+                <Select value={newModule.type} onValueChange={(value) => setNewModule({...newModule, type: value})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih tipe module" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CRM">CRM</SelectItem>
+                    <SelectItem value="Operations">Operations</SelectItem>
+                    <SelectItem value="Finance">Finance</SelectItem>
+                    <SelectItem value="Marketing">Marketing</SelectItem>
+                    <SelectItem value="Custom">Custom</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="moduleDescription">Deskripsi</Label>
+              <textarea
+                id="moduleDescription"
+                value={newModule.description}
+                onChange={(e) => setNewModule({...newModule, description: e.target.value})}
+                placeholder="Masukkan deskripsi module"
+                className="w-full p-2 border rounded-md"
+                rows={3}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Fields</Label>
+              <div className="space-y-2">
+                {newModule.fields.map((field, index) => (
+                  <div key={index} className="flex gap-2 items-center">
+                    <Input
+                      value={field.name}
+                      onChange={(e) => {
+                        const updatedFields = [...newModule.fields];
+                        updatedFields[index].name = e.target.value;
+                        setNewModule({...newModule, fields: updatedFields});
+                      }}
+                      placeholder="Field name"
+                      className="flex-1"
+                    />
+                    <Select
+                      value={field.type}
+                      onValueChange={(value) => {
+                        const updatedFields = [...newModule.fields];
+                        updatedFields[index].type = value;
+                        setNewModule({...newModule, fields: updatedFields});
+                      }}
+                    >
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="text">Text</SelectItem>
+                        <SelectItem value="number">Number</SelectItem>
+                        <SelectItem value="email">Email</SelectItem>
+                        <SelectItem value="tel">Phone</SelectItem>
+                        <SelectItem value="date">Date</SelectItem>
+                        <SelectItem value="select">Select</SelectItem>
+                        <SelectItem value="textarea">Textarea</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const updatedFields = newModule.fields.filter((_, i) => i !== index);
+                        setNewModule({...newModule, fields: updatedFields});
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setNewModule({
+                      ...newModule,
+                      fields: [...newModule.fields, { name: '', type: 'text', label: '', required: false }]
+                    });
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Tambah Field
+                </Button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsModuleBuilderOpen(false)}>
+              Batal
+            </Button>
+            <Button onClick={handleCreateModule} className="bg-red-500 hover:bg-red-600 text-white">
+              Buat Module
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Code Editor Dialog */}
+      <Dialog open={isEditorOpen} onOpenChange={setIsEditorOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Code Editor</DialogTitle>
+            <DialogDescription>
+              Edit dan custom code untuk module yang dipilih.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex gap-2">
+              <Select value={editorLanguage} onValueChange={setEditorLanguage}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="javascript">JavaScript</SelectItem>
+                  <SelectItem value="python">Python</SelectItem>
+                  <SelectItem value="sql">SQL</SelectItem>
+                  <SelectItem value="json">JSON</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button variant="outline" size="sm">
+                <Play className="h-4 w-4 mr-2" />
+                Run
+              </Button>
+              <Button variant="outline" size="sm">
+                <FileCode className="h-4 w-4 mr-2" />
+                Format
+              </Button>
+            </div>
+            <div className="border rounded-lg">
+              <textarea
+                value={editorCode}
+                onChange={(e) => setEditorCode(e.target.value)}
+                className="w-full h-96 p-4 font-mono text-sm border-0 resize-none focus:outline-none"
+                placeholder="// Start coding here..."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditorOpen(false)}>
+              Batal
+            </Button>
+            <Button onClick={handleSaveEditor} className="bg-red-500 hover:bg-red-600 text-white">
+              <Save className="h-4 w-4 mr-2" />
+              Save Code
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

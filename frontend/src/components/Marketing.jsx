@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Target, TrendingUp, Users, Mail, Phone, Calendar, Star } from 'lucide-react';
+import { Target, TrendingUp, Users, Mail, Phone, Calendar, Star, Plus, Settings, Bot } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -12,8 +12,104 @@ import {
   TableHeader, 
   TableRow 
 } from './ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from './ui/dialog';
+import { Label } from './ui/label';
+import { Input } from './ui/input';
+import { Textarea } from './ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 const Marketing = () => {
+  const [isAutomationOpen, setIsAutomationOpen] = useState(false);
+  const [automations, setAutomations] = useState([
+    {
+      id: 'AUTO-001',
+      name: 'Welcome Email Series',
+      type: 'Email',
+      trigger: 'New Lead',
+      status: 'Active',
+      leads: 150,
+      conversions: 25
+    },
+    {
+      id: 'AUTO-002',
+      name: 'Follow-up Sequence',
+      type: 'Email',
+      trigger: 'No Response',
+      status: 'Active',
+      leads: 89,
+      conversions: 12
+    }
+  ]);
+
+  const [newAutomation, setNewAutomation] = useState({
+    name: '',
+    type: '',
+    trigger: '',
+    action: '',
+    conditions: '',
+    schedule: '',
+    status: 'Active'
+  });
+
+  const automationTypes = [
+    'Email',
+    'SMS',
+    'Social Media',
+    'Webhook',
+    'Task Assignment'
+  ];
+
+  const triggers = [
+    'New Lead',
+    'Lead Score Change',
+    'No Response',
+    'Website Visit',
+    'Email Open',
+    'Form Submission',
+    'Purchase',
+    'Date Based'
+  ];
+
+  const actions = [
+    'Send Email',
+    'Send SMS',
+    'Add to Campaign',
+    'Assign to Sales Rep',
+    'Update Lead Score',
+    'Create Task',
+    'Send Webhook',
+    'Add Tag'
+  ];
+
+  const handleCreateAutomation = () => {
+    const automation = {
+      id: `AUTO-${String(automations.length + 1).padStart(3, '0')}`,
+      ...newAutomation,
+      leads: 0,
+      conversions: 0
+    };
+    
+    setAutomations([...automations, automation]);
+    setNewAutomation({
+      name: '',
+      type: '',
+      trigger: '',
+      action: '',
+      conditions: '',
+      schedule: '',
+      status: 'Active'
+    });
+    setIsAutomationOpen(false);
+  };
+
   const campaigns = [
     {
       id: 'CAMP-001',
@@ -415,19 +511,182 @@ const Marketing = () => {
         <TabsContent value="automation" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Marketing Automation</CardTitle>
+              <div className="flex justify-between items-center">
+                <CardTitle>Marketing Automation</CardTitle>
+                <Dialog open={isAutomationOpen} onOpenChange={setIsAutomationOpen}>
+                  <DialogTrigger asChild>
+                    <Button className="bg-red-500 hover:bg-red-600 text-white">
+                      <Bot className="h-4 w-4 mr-2" />
+                      Create Automation
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                      <DialogTitle>Create Marketing Automation</DialogTitle>
+                      <DialogDescription>
+                        Setup automated marketing workflows to nurture leads and customers.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="name">Automation Name</Label>
+                        <Input
+                          id="name"
+                          value={newAutomation.name}
+                          onChange={(e) => setNewAutomation({...newAutomation, name: e.target.value})}
+                          placeholder="Enter automation name"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="type">Type</Label>
+                        <Select value={newAutomation.type} onValueChange={(value) => setNewAutomation({...newAutomation, type: value})}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {automationTypes.map((type) => (
+                              <SelectItem key={type} value={type}>
+                                {type}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="trigger">Trigger</Label>
+                        <Select value={newAutomation.trigger} onValueChange={(value) => setNewAutomation({...newAutomation, trigger: value})}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select trigger" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {triggers.map((trigger) => (
+                              <SelectItem key={trigger} value={trigger}>
+                                {trigger}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="action">Action</Label>
+                        <Select value={newAutomation.action} onValueChange={(value) => setNewAutomation({...newAutomation, action: value})}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select action" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {actions.map((action) => (
+                              <SelectItem key={action} value={action}>
+                                {action}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="schedule">Schedule</Label>
+                        <Select value={newAutomation.schedule} onValueChange={(value) => setNewAutomation({...newAutomation, schedule: value})}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select schedule" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Immediate">Immediate</SelectItem>
+                            <SelectItem value="After 1 hour">After 1 hour</SelectItem>
+                            <SelectItem value="After 1 day">After 1 day</SelectItem>
+                            <SelectItem value="After 1 week">After 1 week</SelectItem>
+                            <SelectItem value="Custom">Custom</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="status">Status</Label>
+                        <Select value={newAutomation.status} onValueChange={(value) => setNewAutomation({...newAutomation, status: value})}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Active">Active</SelectItem>
+                            <SelectItem value="Inactive">Inactive</SelectItem>
+                            <SelectItem value="Draft">Draft</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="col-span-2 space-y-2">
+                        <Label htmlFor="conditions">Conditions</Label>
+                        <Textarea
+                          id="conditions"
+                          value={newAutomation.conditions}
+                          onChange={(e) => setNewAutomation({...newAutomation, conditions: e.target.value})}
+                          placeholder="Enter automation conditions"
+                          rows={3}
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setIsAutomationOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button onClick={handleCreateAutomation} className="bg-red-500 hover:bg-red-600 text-white">
+                        Create Automation
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
             </CardHeader>
-            <CardContent className="text-center py-12">
-              <Target className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">
-                Marketing Automation Workflows
-              </h3>
-              <p className="text-gray-600 mb-6">
-                Setup automated email sequences, lead scoring, dan customer journey automation
-              </p>
-              <Button className="bg-red-500 hover:bg-red-600 text-white">
-                Create Automation
-              </Button>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Automation</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Trigger</TableHead>
+                    <TableHead>Action</TableHead>
+                    <TableHead>Leads</TableHead>
+                    <TableHead>Conversions</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {automations.map((automation) => (
+                    <TableRow key={automation.id}>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{automation.name}</div>
+                          <div className="text-sm text-gray-600">{automation.id}</div>
+                        </div>
+                      </TableCell>
+                      <TableCell>{automation.type}</TableCell>
+                      <TableCell>{automation.trigger}</TableCell>
+                      <TableCell>{automation.action}</TableCell>
+                      <TableCell>{automation.leads}</TableCell>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{automation.conversions}</div>
+                          <div className="text-sm text-gray-600">
+                            {automation.leads > 0 ? ((automation.conversions / automation.leads) * 100).toFixed(1) : 0}%
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={getStatusColor(automation.status)}>
+                          {automation.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline">
+                            <Settings className="h-4 w-4" />
+                          </Button>
+                          <Button size="sm" variant="outline">
+                            <Bot className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         </TabsContent>

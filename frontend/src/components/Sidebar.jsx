@@ -85,6 +85,7 @@ const Sidebar = ({ activeModule, setActiveModule }) => {
       icon: Factory,
       type: 'expandable',
       submenu: [
+        { id: 'production-order', label: 'Production Order' },
         { id: 'production-orders', label: 'Order Produksi' },
         { id: 'bom', label: 'Bill of Materials' },
         { id: 'workstations', label: 'Workstation' },
@@ -97,6 +98,7 @@ const Sidebar = ({ activeModule, setActiveModule }) => {
       icon: Target,
       type: 'expandable',
       submenu: [
+        { id: 'marketing-campaign', label: 'Marketing Campaign' },
         { id: 'campaigns', label: 'Campaigns' },
         { id: 'leads', label: 'Lead Management' },
         { id: 'analytics', label: 'Marketing Analytics' },
@@ -109,6 +111,7 @@ const Sidebar = ({ activeModule, setActiveModule }) => {
       icon: Store,
       type: 'expandable',
       submenu: [
+        { id: 'franchise-partner', label: 'Franchise Partner' },
         { id: 'partners', label: 'Mitra Franchise' },
         { id: 'territories', label: 'Territory' },
         { id: 'royalty', label: 'Royalty' },

@@ -16,6 +16,38 @@ import Franchise from './components/Franchise';
 import Customization from './components/Customization';
 import DataManager from './components/DataManager';
 import ExcelProcessor from './components/ExcelProcessor';
+
+// New Sales Modules
+import Customer from './components/Customer';
+import SalesOrder from './components/SalesOrder';
+import Quotation from './components/Quotation';
+
+// New Purchase Modules
+import Vendor from './components/Vendor';
+import PurchaseOrder from './components/PurchaseOrder';
+import PurchaseInvoice from './components/PurchaseInvoice';
+
+// New Inventory Modules
+import StockOpname from './components/StockOpname';
+import TransferStock from './components/TransferStock';
+
+// New Manufacturing Modules
+import ProductionOrder from './components/ProductionOrder';
+
+// New Marketing Modules
+import MarketingCampaign from './components/MarketingCampaign';
+
+// New Franchise Modules
+import FranchisePartner from './components/FranchisePartner';
+
+// New Accounting Modules
+import ChartOfAccounts from './components/ChartOfAccounts';
+import GeneralJournal from './components/GeneralJournal';
+
+// New System Modules
+import UserManagement from './components/UserManagement';
+import Settings from './components/Settings';
+
 import { Toaster } from './components/ui/toaster';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -52,42 +84,89 @@ function App() {
     switch (activeModule) {
       case 'dashboard':
         return <Dashboard />;
+      
+      // Sales Modules
       case 'sales-invoice':
         return <SalesInvoice />;
+      case 'sales-customer':
+        return <Customer />;
+      case 'sales-order':
+        return <SalesOrder />;
+      case 'sales-quotation':
+        return <Quotation />;
+      
+      // Purchase Modules
+      case 'purchase-invoice':
+        return <PurchaseInvoice />;
+      case 'purchase-order':
+        return <PurchaseOrder />;
+      case 'purchase-vendor':
+        return <Vendor />;
+      
+      // Inventory Modules
       case 'products':
         return <Products />;
-      case 'balance-sheet':
-      case 'profit-loss':
-      case 'cash-flow':
-      case 'aging-report':
-      case 'reports':
-        return <Reports />;
+      case 'stock-opname':
+        return <StockOpname />;
+      case 'stock-transfer':
+        return <TransferStock />;
+      
+      // Manufacturing Modules
       case 'manufacturing':
       case 'production-orders':
       case 'bom':
       case 'workstations':
       case 'quality-control':
         return <Manufacturing />;
+      case 'production-order':
+        return <ProductionOrder />;
+      
+      // Marketing Modules
       case 'marketing':
       case 'campaigns':
       case 'leads':
       case 'analytics':
       case 'automation':
         return <Marketing />;
+      case 'marketing-campaign':
+        return <MarketingCampaign />;
+      
+      // Franchise Modules
       case 'franchise':
       case 'partners':
       case 'territories':
       case 'royalty':
       case 'performance':
         return <Franchise />;
+      case 'franchise-partner':
+        return <FranchisePartner />;
+      
+      // Accounting Modules
+      case 'chart-accounts':
+        return <ChartOfAccounts />;
+      case 'journal-entry':
+        return <GeneralJournal />;
+      case 'balance-sheet':
+      case 'profit-loss':
+      case 'cash-flow':
+      case 'aging-report':
+      case 'reports':
+        return <Reports />;
+      
+      // System Modules
+      case 'users':
+        return <UserManagement />;
+      case 'settings':
+        return <Settings />;
+      
+      // Other Modules
       case 'excel-processor':
         return <ExcelProcessor />;
       case 'data-manager':
       case 'data-modules':
       case 'api-builder':
         return <DataManager />;
-      case 'settings':
-        return <Customization />;
+      
       default:
         return (
           <div className="p-6">
@@ -106,20 +185,51 @@ function App() {
 
   const getModuleName = (moduleId) => {
     const moduleNames = {
+      // Sales Modules
+      'sales-customer': 'Customer Management',
       'sales-order': 'Sales Order',
       'sales-quotation': 'Quotation',
-      'sales-customer': 'Customer',
-      'purchase-invoice': 'Invoice Pembelian',
+      'sales-invoice': 'Sales Invoice',
+      
+      // Purchase Modules
+      'purchase-vendor': 'Vendor Management',
       'purchase-order': 'Purchase Order',
-      'purchase-vendor': 'Vendor',
-      'inventory': 'Inventory',
+      'purchase-invoice': 'Invoice Pembelian',
+      
+      // Inventory Modules
+      'products': 'Products',
       'stock-opname': 'Stock Opname',
       'stock-transfer': 'Transfer Stock',
+      
+      // Manufacturing Modules
+      'production-order': 'Production Order',
+      'manufacturing': 'Manufacturing',
+      
+      // Marketing Modules
+      'marketing-campaign': 'Marketing Campaign',
+      'marketing': 'Marketing',
+      
+      // Franchise Modules
+      'franchise-partner': 'Franchise Partner',
+      'franchise': 'Franchise',
+      
+      // Accounting Modules
       'chart-accounts': 'Chart of Accounts',
-      'journal-entry': 'Jurnal Umum',
-      'bank-reconciliation': 'Rekonsiliasi Bank',
-      'users': 'Pengguna',
-      'settings': 'Pengaturan'
+      'journal-entry': 'General Journal',
+      'balance-sheet': 'Balance Sheet',
+      'profit-loss': 'Profit & Loss',
+      'cash-flow': 'Cash Flow',
+      'aging-report': 'Aging Report',
+      'reports': 'Reports',
+      
+      // System Modules
+      'users': 'User Management',
+      'settings': 'System Settings',
+      
+      // Other Modules
+      'excel-processor': 'Excel Processor',
+      'data-manager': 'Data Manager',
+      'dashboard': 'Dashboard'
     };
     return moduleNames[moduleId] || 'Modul';
   };

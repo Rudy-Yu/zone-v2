@@ -1,12 +1,50 @@
 import React, { useState } from 'react';
-import { Download, Calendar, TrendingUp, FileText, DollarSign } from 'lucide-react';
+import { Download, Calendar, TrendingUp, FileText, DollarSign, Filter, Settings } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from './ui/dialog';
+import { Label } from './ui/label';
+import { Input } from './ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 const Reports = () => {
   const [selectedPeriod, setSelectedPeriod] = useState('month');
+  const [isPeriodDialogOpen, setIsPeriodDialogOpen] = useState(false);
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+  const [periodFilter, setPeriodFilter] = useState({
+    startDate: '',
+    endDate: '',
+    period: 'month',
+    reportType: 'all'
+  });
+  const [exportSettings, setExportSettings] = useState({
+    format: 'pdf',
+    reportType: 'all',
+    includeCharts: true,
+    includeDetails: true
+  });
+
+  const handlePeriodFilter = () => {
+    // Apply period filter
+    console.log('Period filter applied:', periodFilter);
+    setIsPeriodDialogOpen(false);
+  };
+
+  const handleExport = () => {
+    // Export report
+    console.log('Exporting report with settings:', exportSettings);
+    setIsExportDialogOpen(false);
+  };
 
   const reportTypes = [
     {
@@ -75,14 +113,160 @@ const Reports = () => {
           <p className="text-gray-600">Analisis keuangan dan performa bisnis Anda</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">
-            <Calendar className="h-4 w-4 mr-2" />
-            Pilih Periode
-          </Button>
-          <Button className="bg-red-500 hover:bg-red-600 text-white">
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
+          <Dialog open={isPeriodDialogOpen} onOpenChange={setIsPeriodDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Calendar className="h-4 w-4 mr-2" />
+                Pilih Periode
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Pilih Periode Laporan</DialogTitle>
+                <DialogDescription>
+                  Tentukan periode untuk laporan yang akan ditampilkan.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="startDate">Tanggal Mulai</Label>
+                  <Input
+                    id="startDate"
+                    type="date"
+                    value={periodFilter.startDate}
+                    onChange={(e) => setPeriodFilter({...periodFilter, startDate: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="endDate">Tanggal Akhir</Label>
+                  <Input
+                    id="endDate"
+                    type="date"
+                    value={periodFilter.endDate}
+                    onChange={(e) => setPeriodFilter({...periodFilter, endDate: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="period">Periode</Label>
+                  <Select value={periodFilter.period} onValueChange={(value) => setPeriodFilter({...periodFilter, period: value})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih periode" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="day">Harian</SelectItem>
+                      <SelectItem value="week">Mingguan</SelectItem>
+                      <SelectItem value="month">Bulanan</SelectItem>
+                      <SelectItem value="quarter">Triwulan</SelectItem>
+                      <SelectItem value="year">Tahunan</SelectItem>
+                      <SelectItem value="custom">Custom</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="reportType">Jenis Laporan</Label>
+                  <Select value={periodFilter.reportType} onValueChange={(value) => setPeriodFilter({...periodFilter, reportType: value})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih jenis laporan" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Semua Laporan</SelectItem>
+                      <SelectItem value="financial">Laporan Keuangan</SelectItem>
+                      <SelectItem value="sales">Laporan Penjualan</SelectItem>
+                      <SelectItem value="purchase">Laporan Pembelian</SelectItem>
+                      <SelectItem value="inventory">Laporan Inventori</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsPeriodDialogOpen(false)}>
+                  Batal
+                </Button>
+                <Button onClick={handlePeriodFilter} className="bg-red-500 hover:bg-red-600 text-white">
+                  Terapkan Filter
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-red-500 hover:bg-red-600 text-white">
+                <Download className="h-4 w-4 mr-2" />
+                Export
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Export Laporan</DialogTitle>
+                <DialogDescription>
+                  Pilih format dan pengaturan untuk export laporan.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="format">Format Export</Label>
+                  <Select value={exportSettings.format} onValueChange={(value) => setExportSettings({...exportSettings, format: value})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih format" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pdf">PDF</SelectItem>
+                      <SelectItem value="excel">Excel</SelectItem>
+                      <SelectItem value="csv">CSV</SelectItem>
+                      <SelectItem value="word">Word</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="reportType">Jenis Laporan</Label>
+                  <Select value={exportSettings.reportType} onValueChange={(value) => setExportSettings({...exportSettings, reportType: value})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih jenis laporan" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Semua Laporan</SelectItem>
+                      <SelectItem value="balance-sheet">Neraca</SelectItem>
+                      <SelectItem value="profit-loss">Laba Rugi</SelectItem>
+                      <SelectItem value="cash-flow">Arus Kas</SelectItem>
+                      <SelectItem value="aging-report">Aging Report</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Opsi Export</Label>
+                  <div className="space-y-2">
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={exportSettings.includeCharts}
+                        onChange={(e) => setExportSettings({...exportSettings, includeCharts: e.target.checked})}
+                        className="rounded"
+                      />
+                      <span className="text-sm">Sertakan Grafik</span>
+                    </label>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={exportSettings.includeDetails}
+                        onChange={(e) => setExportSettings({...exportSettings, includeDetails: e.target.checked})}
+                        className="rounded"
+                      />
+                      <span className="text-sm">Sertakan Detail</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsExportDialogOpen(false)}>
+                  Batal
+                </Button>
+                <Button onClick={handleExport} className="bg-red-500 hover:bg-red-600 text-white">
+                  Export Laporan
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 

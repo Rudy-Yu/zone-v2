@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Search, Edit, Trash2, Eye, BookOpen, DollarSign, TrendingUp, TrendingDown, Calculator } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Eye, BookOpen, DollarSign, TrendingUp, TrendingDown, Calculator, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -28,6 +28,80 @@ const ChartOfAccounts = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState(null);
+  const [isBankReconciliationOpen, setIsBankReconciliationOpen] = useState(false);
+  const [bankReconciliation, setBankReconciliation] = useState({
+    bankAccount: '',
+    statementDate: '',
+    statementBalance: '',
+    bookBalance: '',
+    adjustments: []
+  });
+
+  const [bankTransactions, setBankTransactions] = useState([
+    {
+      id: 'BT-001',
+      date: '2024-01-15',
+      description: 'Deposit from Customer A',
+      debit: 5000000,
+      credit: 0,
+      balance: 55000000,
+      status: 'Cleared'
+    },
+    {
+      id: 'BT-002',
+      date: '2024-01-16',
+      description: 'Payment to Supplier B',
+      debit: 0,
+      credit: 2500000,
+      balance: 52500000,
+      status: 'Cleared'
+    },
+    {
+      id: 'BT-003',
+      date: '2024-01-17',
+      description: 'Bank Service Charge',
+      debit: 0,
+      credit: 50000,
+      balance: 52450000,
+      status: 'Outstanding'
+    },
+    {
+      id: 'BT-004',
+      date: '2024-01-18',
+      description: 'Interest Earned',
+      debit: 100000,
+      credit: 0,
+      balance: 52550000,
+      status: 'Outstanding'
+    }
+  ]);
+
+  const bankAccounts = [
+    { id: 'BANK-001', name: 'BCA - Main Account', accountNumber: '1234567890', balance: 52550000 },
+    { id: 'BANK-002', name: 'Mandiri - Business Account', accountNumber: '0987654321', balance: 15000000 },
+    { id: 'BANK-003', name: 'BNI - Savings Account', accountNumber: '1122334455', balance: 5000000 }
+  ];
+
+  const handleBankReconciliation = () => {
+    // Process bank reconciliation
+    const reconciledTransactions = bankTransactions.filter(t => t.status === 'Cleared');
+    const outstandingTransactions = bankTransactions.filter(t => t.status === 'Outstanding');
+    
+    // Calculate adjusted book balance
+    const adjustments = outstandingTransactions.map(t => ({
+      id: t.id,
+      description: t.description,
+      amount: t.debit - t.credit,
+      type: t.debit > 0 ? 'Add' : 'Subtract'
+    }));
+    
+    setBankReconciliation({
+      ...bankReconciliation,
+      adjustments: adjustments
+    });
+    
+    setIsBankReconciliationOpen(false);
+  };
   
   const [accounts, setAccounts] = useState([
     {
@@ -529,11 +603,19 @@ const ChartOfAccounts = () => {
         </CardContent>
       </Card>
 
-      {/* Accounts Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Chart of Accounts</CardTitle>
-        </CardHeader>
+      {/* Tabs */}
+      <Tabs defaultValue="accounts" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="accounts">Chart of Accounts</TabsTrigger>
+          <TabsTrigger value="bank-reconciliation">Bank Reconciliation</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="accounts" className="space-y-6">
+          {/* Accounts Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Chart of Accounts</CardTitle>
+            </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
@@ -622,9 +704,178 @@ const ChartOfAccounts = () => {
           </Table>
         </CardContent>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="bank-reconciliation" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <CardTitle>Bank Reconciliation</CardTitle>
+                <Dialog open={isBankReconciliationOpen} onOpenChange={setIsBankReconciliationOpen}>
+                  <DialogTrigger asChild>
+                    <Button className="bg-red-500 hover:bg-red-600 text-white">
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Start Reconciliation
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                      <DialogTitle>Bank Reconciliation</DialogTitle>
+                      <DialogDescription>
+                        Reconcile bank statement with book balance.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="bankAccount">Bank Account</Label>
+                        <select
+                          id="bankAccount"
+                          value={bankReconciliation.bankAccount}
+                          onChange={(e) => setBankReconciliation({...bankReconciliation, bankAccount: e.target.value})}
+                          className="w-full p-2 border rounded-md"
+                        >
+                          <option value="">Select Bank Account</option>
+                          {bankAccounts.map((account) => (
+                            <option key={account.id} value={account.id}>
+                              {account.name} - {account.accountNumber}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="statementDate">Statement Date</Label>
+                        <Input
+                          id="statementDate"
+                          type="date"
+                          value={bankReconciliation.statementDate}
+                          onChange={(e) => setBankReconciliation({...bankReconciliation, statementDate: e.target.value})}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="statementBalance">Statement Balance</Label>
+                        <Input
+                          id="statementBalance"
+                          type="number"
+                          value={bankReconciliation.statementBalance}
+                          onChange={(e) => setBankReconciliation({...bankReconciliation, statementBalance: e.target.value})}
+                          placeholder="Enter statement balance"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="bookBalance">Book Balance</Label>
+                        <Input
+                          id="bookBalance"
+                          type="number"
+                          value={bankReconciliation.bookBalance}
+                          onChange={(e) => setBankReconciliation({...bankReconciliation, bookBalance: e.target.value})}
+                          placeholder="Enter book balance"
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setIsBankReconciliationOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button onClick={handleBankReconciliation} className="bg-red-500 hover:bg-red-600 text-white">
+                        Process Reconciliation
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                {/* Bank Transactions */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Bank Transactions</h3>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead>Debit</TableHead>
+                        <TableHead>Credit</TableHead>
+                        <TableHead>Balance</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {bankTransactions.map((transaction) => (
+                        <TableRow key={transaction.id}>
+                          <TableCell>{transaction.date}</TableCell>
+                          <TableCell>{transaction.description}</TableCell>
+                          <TableCell>{transaction.debit > 0 ? `Rp ${transaction.debit.toLocaleString('id-ID')}` : '-'}</TableCell>
+                          <TableCell>{transaction.credit > 0 ? `Rp ${transaction.credit.toLocaleString('id-ID')}` : '-'}</TableCell>
+                          <TableCell>Rp {transaction.balance.toLocaleString('id-ID')}</TableCell>
+                          <TableCell>
+                            <Badge className={transaction.status === 'Cleared' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}>
+                              {transaction.status}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Reconciliation Summary */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-3 bg-blue-100 rounded-lg">
+                          <CheckCircle className="h-6 w-6 text-blue-600" />
+                        </div>
+                        <div>
+                          <div className="text-sm text-gray-600">Cleared Transactions</div>
+                          <div className="text-2xl font-bold text-blue-600">
+                            {bankTransactions.filter(t => t.status === 'Cleared').length}
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-3 bg-yellow-100 rounded-lg">
+                          <AlertCircle className="h-6 w-6 text-yellow-600" />
+                        </div>
+                        <div>
+                          <div className="text-sm text-gray-600">Outstanding Transactions</div>
+                          <div className="text-2xl font-bold text-yellow-600">
+                            {bankTransactions.filter(t => t.status === 'Outstanding').length}
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-3 bg-green-100 rounded-lg">
+                          <Calculator className="h-6 w-6 text-green-600" />
+                        </div>
+                        <div>
+                          <div className="text-sm text-gray-600">Reconciled Balance</div>
+                          <div className="text-2xl font-bold text-green-600">
+                            Rp {bankTransactions[bankTransactions.length - 1]?.balance.toLocaleString('id-ID') || '0'}
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
 
 export default ChartOfAccounts;
+
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Factory, Wrench, Clock, Package2, TrendingUp, AlertTriangle } from 'lucide-react';
+import { Factory, Wrench, Clock, Package2, TrendingUp, AlertTriangle, Plus, Edit, Trash2, Eye } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -12,12 +12,25 @@ import {
   TableHeader, 
   TableRow 
 } from './ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from './ui/dialog';
+import { Label } from './ui/label';
+import { Input } from './ui/input';
+import { Textarea } from './ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 const Manufacturing = () => {
   const [activeTab, setActiveTab] = useState('production');
-
-  // Mock data for manufacturing
-  const productionOrders = [
+  const [isCreateOrderOpen, setIsCreateOrderOpen] = useState(false);
+  const [isQualityControlOpen, setIsQualityControlOpen] = useState(false);
+  const [productionOrders, setProductionOrders] = useState([
     {
       id: 'PO-001',
       product: 'Laptop Gaming ROG',
@@ -45,7 +58,82 @@ const Manufacturing = () => {
       status: 'Completed',
       completion: 100
     }
+  ]);
+
+  const [newProductionOrder, setNewProductionOrder] = useState({
+    product: '',
+    quantity: '',
+    startDate: '',
+    endDate: '',
+    workstation: '',
+    worker: '',
+    priority: 'Normal',
+    notes: ''
+  });
+
+  const [qualityControl, setQualityControl] = useState({
+    orderId: '',
+    inspector: '',
+    checkDate: '',
+    result: 'Pass',
+    notes: ''
+  });
+
+  const products = [
+    'Laptop Gaming ROG',
+    'Smartphone Pro Max',
+    'Tablet Ultra',
+    'Desktop Workstation',
+    'Gaming Monitor'
   ];
+
+  const workers = [
+    'John Worker',
+    'Jane Smith',
+    'Mike Johnson',
+    'Sarah Wilson',
+    'David Brown'
+  ];
+
+  const handleCreateProductionOrder = () => {
+    const order = {
+      id: `PO-${String(productionOrders.length + 1).padStart(3, '0')}`,
+      ...newProductionOrder,
+      quantity: parseInt(newProductionOrder.quantity),
+      status: 'Planning',
+      completion: 0
+    };
+    
+    setProductionOrders([...productionOrders, order]);
+    setNewProductionOrder({
+      product: '',
+      quantity: '',
+      startDate: '',
+      endDate: '',
+      workstation: '',
+      worker: '',
+      priority: 'Normal',
+      notes: ''
+    });
+    setIsCreateOrderOpen(false);
+  };
+
+  const handleQualityControl = () => {
+    // Update production order with quality control result
+    setProductionOrders(productionOrders.map(order => 
+      order.id === qualityControl.orderId 
+        ? { ...order, qualityCheck: qualityControl.result, qualityDate: qualityControl.checkDate }
+        : order
+    ));
+    setQualityControl({
+      orderId: '',
+      inspector: '',
+      checkDate: '',
+      result: 'Pass',
+      notes: ''
+    });
+    setIsQualityControlOpen(false);
+  };
 
   const bomItems = [
     {
@@ -95,10 +183,214 @@ const Manufacturing = () => {
           <h1 className="text-2xl font-bold text-gray-800 mb-2">Manufaktur</h1>
           <p className="text-gray-600">Kelola produksi dan operasi manufaktur</p>
         </div>
-        <Button className="bg-red-500 hover:bg-red-600 text-white">
-          <Factory className="h-4 w-4 mr-2" />
-          Buat Order Produksi
-        </Button>
+        <div className="flex gap-2">
+          <Dialog open={isCreateOrderOpen} onOpenChange={setIsCreateOrderOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-red-500 hover:bg-red-600 text-white">
+                <Factory className="h-4 w-4 mr-2" />
+                Buat Order Produksi
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Buat Order Produksi Baru</DialogTitle>
+                <DialogDescription>
+                  Isi informasi untuk order produksi baru.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="product">Produk</Label>
+                  <Select value={newProductionOrder.product} onValueChange={(value) => setNewProductionOrder({...newProductionOrder, product: value})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih produk" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {products.map((product) => (
+                        <SelectItem key={product} value={product}>
+                          {product}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="quantity">Jumlah</Label>
+                  <Input
+                    id="quantity"
+                    type="number"
+                    value={newProductionOrder.quantity}
+                    onChange={(e) => setNewProductionOrder({...newProductionOrder, quantity: e.target.value})}
+                    placeholder="Masukkan jumlah"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="startDate">Tanggal Mulai</Label>
+                  <Input
+                    id="startDate"
+                    type="date"
+                    value={newProductionOrder.startDate}
+                    onChange={(e) => setNewProductionOrder({...newProductionOrder, startDate: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="endDate">Tanggal Selesai</Label>
+                  <Input
+                    id="endDate"
+                    type="date"
+                    value={newProductionOrder.endDate}
+                    onChange={(e) => setNewProductionOrder({...newProductionOrder, endDate: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="workstation">Workstation</Label>
+                  <Select value={newProductionOrder.workstation} onValueChange={(value) => setNewProductionOrder({...newProductionOrder, workstation: value})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih workstation" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {workstations.map((ws) => (
+                        <SelectItem key={ws.id} value={ws.name}>
+                          {ws.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="worker">Worker</Label>
+                  <Select value={newProductionOrder.worker} onValueChange={(value) => setNewProductionOrder({...newProductionOrder, worker: value})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih worker" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {workers.map((worker) => (
+                        <SelectItem key={worker} value={worker}>
+                          {worker}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="priority">Prioritas</Label>
+                  <Select value={newProductionOrder.priority} onValueChange={(value) => setNewProductionOrder({...newProductionOrder, priority: value})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih prioritas" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Low">Low</SelectItem>
+                      <SelectItem value="Normal">Normal</SelectItem>
+                      <SelectItem value="High">High</SelectItem>
+                      <SelectItem value="Urgent">Urgent</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="col-span-2 space-y-2">
+                  <Label htmlFor="notes">Catatan</Label>
+                  <Textarea
+                    id="notes"
+                    value={newProductionOrder.notes}
+                    onChange={(e) => setNewProductionOrder({...newProductionOrder, notes: e.target.value})}
+                    placeholder="Masukkan catatan"
+                    rows={3}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsCreateOrderOpen(false)}>
+                  Batal
+                </Button>
+                <Button onClick={handleCreateProductionOrder} className="bg-red-500 hover:bg-red-600 text-white">
+                  Buat Order
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isQualityControlOpen} onOpenChange={setIsQualityControlOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Wrench className="h-4 w-4 mr-2" />
+                Setup Quality Control
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Setup Quality Control</DialogTitle>
+                <DialogDescription>
+                  Konfigurasi quality control untuk order produksi.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="orderId">Order Produksi</Label>
+                  <Select value={qualityControl.orderId} onValueChange={(value) => setQualityControl({...qualityControl, orderId: value})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih order produksi" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {productionOrders.map((order) => (
+                        <SelectItem key={order.id} value={order.id}>
+                          {order.id} - {order.product}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="inspector">Inspector</Label>
+                  <Input
+                    id="inspector"
+                    value={qualityControl.inspector}
+                    onChange={(e) => setQualityControl({...qualityControl, inspector: e.target.value})}
+                    placeholder="Masukkan nama inspector"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="checkDate">Tanggal Check</Label>
+                  <Input
+                    id="checkDate"
+                    type="date"
+                    value={qualityControl.checkDate}
+                    onChange={(e) => setQualityControl({...qualityControl, checkDate: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="result">Hasil</Label>
+                  <Select value={qualityControl.result} onValueChange={(value) => setQualityControl({...qualityControl, result: value})}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih hasil" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Pass">Pass</SelectItem>
+                      <SelectItem value="Fail">Fail</SelectItem>
+                      <SelectItem value="Pending">Pending</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="notes">Catatan</Label>
+                  <Textarea
+                    id="notes"
+                    value={qualityControl.notes}
+                    onChange={(e) => setQualityControl({...qualityControl, notes: e.target.value})}
+                    placeholder="Masukkan catatan quality control"
+                    rows={3}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsQualityControlOpen(false)}>
+                  Batal
+                </Button>
+                <Button onClick={handleQualityControl} className="bg-red-500 hover:bg-red-600 text-white">
+                  Setup Quality Control
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* KPI Cards */}

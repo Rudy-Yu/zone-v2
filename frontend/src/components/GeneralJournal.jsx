@@ -568,3 +568,4 @@ const GeneralJournal = () => {
 
 export default GeneralJournal;
 
+
