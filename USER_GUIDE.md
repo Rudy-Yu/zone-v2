@@ -770,50 +770,64 @@ The dashboard provides a comprehensive overview of your business:
 3. **Monitor user actions**
 4. **Generate activity reports**
 
-### 2. System Settings
+### 2. System Settings (Pengaturan)
 
-#### **General Settings**
+Gunakan Pengaturan untuk mengelola konfigurasi aplikasi. Perubahan yang Anda lakukan akan menyalakan banner peringatan “You have unsaved changes…”. Klik Save untuk menyimpan, atau Reset untuk mengembalikan ke default.
 
-1. **Navigate to System → Settings**
-2. **Go to "General" tab**
-3. **Configure settings**:
-   - **Company Name**
-   - **Currency**
-   - **Timezone**
-   - **Date Format**
-4. **Save settings**
+#### A. General
 
-#### **Database Settings**
+1. Buka Sidebar → System → Settings → tab "General".
+2. Isi informasi perusahaan: Company Name, Email, Phone, Website, Tax Number, Address.
+3. Atur preferensi: Currency, Timezone, Date Format.
+4. Klik Save Settings. Banner kuning hilang, perubahan tersimpan di sesi saat ini.
 
-1. **Go to "Database" tab**
-2. **Configure database settings**:
-   - **Host**
-   - **Port**
-   - **Database Name**
-   - **Connection String**
-3. **Test connection**
-4. **Save settings**
+Tips: Jika perlu membatalkan perubahan, klik Reset. Anda akan diminta konfirmasi.
 
-#### **Email Settings**
+#### B. Database
 
-1. **Go to "Email" tab**
-2. **Configure email settings**:
-   - **SMTP Host**
-   - **SMTP Port**
-   - **Username**
-   - **Password**
-3. **Test email configuration**
-4. **Save settings**
+1. Buka tab "Database".
+2. Atur koneksi: Database Host, Port, Name.
+3. Atur backup: Backup Frequency, Auto Backup (centang/lepaskan), Retention (hari).
+4. Aksi cepat:
+   - Klik "Backup Now" untuk memulai backup.
+   - Klik "Restore" untuk memilih berkas backup yang akan dipulihkan.
 
-#### **Security Settings**
+Catatan: Saat ini aksi backup/restore bersifat simulasi UI. Integrasi ke backend dapat ditambahkan sesuai kebutuhan.
 
-1. **Go to "Security" tab**
-2. **Configure security settings**:
-   - **Password Policy**
-   - **Session Timeout**
-   - **Login Attempts**
-   - **Two-Factor Authentication**
-3. **Save settings**
+#### C. Email
+
+1. Buka tab "Email".
+2. Konfigurasi SMTP: Host, Port, Username, Password, Encryption (TLS/SSL/None).
+3. Atur identitas pengirim: From Name, From Email.
+4. Simpan perubahan dengan tombol Save Settings (di header).
+
+#### D. Notifications
+
+1. Buka tab "Notifications".
+2. Aktifkan/nonaktifkan setiap notifikasi (Email, SMS, Push, Low Stock, Payment Reminder, System Maintenance, New User Alert, Order Status Update).
+3. Perubahan akan menyalakan banner kuning; klik Save untuk menyimpan.
+
+#### E. Security
+
+1. Buka tab "Security".
+2. Atur kebijakan keamanan:
+   - Session Timeout, Password Min Length, Max Login Attempts, Lockout Duration.
+   - Password policy: Require Special Characters, Numbers, Uppercase.
+   - Two-Factor Authentication (opsional), Audit Logging.
+   - IP Whitelist (pisahkan dengan koma).
+3. Klik Save Settings untuk menerapkan.
+
+#### F. Appearance
+
+1. Buka tab "Appearance".
+2. Tema & warna: Theme (Light/Dark/Auto), Primary Color, Secondary Color.
+3. Preferensi UI: Default Page Size, Auto Refresh Interval.
+4. Tampilkan/sematkan: Collapse Sidebar, Show Notification Badge, Show Quick Actions, Auto Refresh.
+5. Klik Save Settings.
+
+Indikator Simpan:
+- Saat ada perubahan, banner kuning muncul di bawah halaman.
+- Setelah klik Save Settings, banner akan hilang menandakan perubahan sudah tersimpan.
 
 ---
 
@@ -995,4 +1009,5 @@ The dashboard provides a comprehensive overview of your business:
 ---
 
 *This user guide is regularly updated to reflect new features and improvements.*
+
 

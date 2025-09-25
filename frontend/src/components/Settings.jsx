@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Save, RefreshCw, Database, Globe, Mail, Bell, Shield, Palette, Download, Upload } from 'lucide-react';
+import { Save, RefreshCw, Database, Globe, Mail, Bell, Shield, Palette, Download, Upload, AlertTriangle } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -752,6 +752,7 @@ const Settings = () => {
 };
 
 export default Settings;
+
 
 
 

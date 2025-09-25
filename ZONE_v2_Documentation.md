@@ -1179,3 +1179,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 **ZONE v.2** - Complete Business Management System
 *Built with ❤️ for modern businesses*
 
+

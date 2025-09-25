@@ -1058,3 +1058,4 @@ curl -X DELETE http://localhost:8000/api/customers/{id} \
 
 *This API documentation is regularly updated to reflect current endpoints and features.*
 
+

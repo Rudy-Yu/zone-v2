@@ -40,6 +40,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from './ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from './ui/dialog';
 
 const DataManager = () => {
   const [importedData, setImportedData] = useState([]);

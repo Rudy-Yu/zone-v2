@@ -15,6 +15,7 @@ import Marketing from './components/Marketing';
 import Franchise from './components/Franchise';
 import Customization from './components/Customization';
 import DataManager from './components/DataManager';
+import ApiBuilder from './components/ApiBuilder';
 import ExcelProcessor from './components/ExcelProcessor';
 
 // New Sales Modules
@@ -43,6 +44,7 @@ import FranchisePartner from './components/FranchisePartner';
 // New Accounting Modules
 import ChartOfAccounts from './components/ChartOfAccounts';
 import GeneralJournal from './components/GeneralJournal';
+import BankReconciliation from './components/BankReconciliation';
 
 // New System Modules
 import UserManagement from './components/UserManagement';
@@ -146,6 +148,8 @@ function App() {
         return <ChartOfAccounts />;
       case 'journal-entry':
         return <GeneralJournal />;
+      case 'bank-reconciliation':
+        return <BankReconciliation />;
       case 'balance-sheet':
       case 'profit-loss':
       case 'cash-flow':
@@ -164,8 +168,9 @@ function App() {
         return <ExcelProcessor />;
       case 'data-manager':
       case 'data-modules':
-      case 'api-builder':
         return <DataManager />;
+      case 'api-builder':
+        return <ApiBuilder />;
       
       default:
         return (
@@ -229,6 +234,7 @@ function App() {
       // Other Modules
       'excel-processor': 'Excel Processor',
       'data-manager': 'Data Manager',
+      'api-builder': 'API Builder',
       'dashboard': 'Dashboard'
     };
     return moduleNames[moduleId] || 'Modul';
