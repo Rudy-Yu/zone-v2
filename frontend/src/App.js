@@ -50,6 +50,9 @@ import BankReconciliation from './components/BankReconciliation';
 import UserManagement from './components/UserManagement';
 import Settings from './components/Settings';
 
+// Fast Input Demo
+import FastInputDemo from './components/FastInputDemo';
+
 import { Toaster } from './components/ui/toaster';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -171,6 +174,8 @@ function App() {
         return <DataManager />;
       case 'api-builder':
         return <ApiBuilder />;
+      case 'fast-input-demo':
+        return <FastInputDemo />;
       
       default:
         return (

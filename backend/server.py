@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, HTTPException
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -6,7 +6,7 @@ import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Optional, Any, Dict
 import uuid
 from datetime import datetime
 
@@ -73,3 +73,268 @@ logger = logging.getLogger(__name__)
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+
+
+# =============================
+# Settings persistence endpoints
+# =============================
+
+SETTINGS_DOC_ID = "system_settings"
+
+
+class SettingsPayload(BaseModel):
+    general: Dict[str, Any]
+    database: Dict[str, Any]
+    email: Dict[str, Any]
+    notifications: Dict[str, Any]
+    security: Dict[str, Any]
+    appearance: Dict[str, Any]
+
+
+DEFAULT_SETTINGS: SettingsPayload = SettingsPayload(
+    general={
+        "companyName": "ZONE v.2",
+        "companyAddress": "Jl. Industri No. 123, Jakarta Pusat",
+        "companyPhone": "+62 21 1234 5678",
+        "companyEmail": "info@zone.com",
+        "companyWebsite": "www.zone.com",
+        "taxNumber": "123456789012345",
+        "currency": "IDR",
+        "timezone": "Asia/Jakarta",
+        "dateFormat": "DD/MM/YYYY",
+        "timeFormat": "24h",
+    },
+    database={
+        "dbHost": "localhost",
+        "dbPort": "27017",
+        "dbName": "zone_db",
+        "backupFrequency": "daily",
+        "lastBackup": "",
+        "autoBackup": True,
+        "backupRetention": "30",
+    },
+    email={
+        "smtpHost": "smtp.gmail.com",
+        "smtpPort": "587",
+        "smtpUsername": "noreply@zone.com",
+        "smtpPassword": "",
+        "smtpEncryption": "TLS",
+        "fromName": "ZONE System",
+        "fromEmail": "noreply@zone.com",
+    },
+    notifications={
+        "emailNotifications": True,
+        "smsNotifications": False,
+        "pushNotifications": True,
+        "lowStockAlert": True,
+        "paymentReminder": True,
+        "systemMaintenance": True,
+        "newUserAlert": True,
+        "orderStatusUpdate": True,
+    },
+    security={
+        "sessionTimeout": "30",
+        "passwordMinLength": "8",
+        "requireSpecialChars": True,
+        "requireNumbers": True,
+        "requireUppercase": True,
+        "maxLoginAttempts": "5",
+        "lockoutDuration": "15",
+        "twoFactorAuth": False,
+        "ipWhitelist": "",
+        "auditLog": True,
+    },
+    appearance={
+        "theme": "light",
+        "primaryColor": "#ef4444",
+        "secondaryColor": "#64748b",
+        "sidebarCollapsed": False,
+        "showNotifications": True,
+        "showQuickActions": True,
+        "defaultPageSize": "25",
+        "autoRefresh": True,
+        "refreshInterval": "30",
+    },
+)
+
+
+@api_router.get("/settings", response_model=SettingsPayload)
+async def get_settings():
+    doc = await db.settings.find_one({"_id": SETTINGS_DOC_ID})
+    if not doc:
+        # Seed default settings
+        payload = DEFAULT_SETTINGS.dict()
+        await db.settings.replace_one(
+            {"_id": SETTINGS_DOC_ID}, {"_id": SETTINGS_DOC_ID, **payload}, upsert=True
+        )
+        return DEFAULT_SETTINGS
+    # remove _id before constructing model
+    doc.pop("_id", None)
+    return SettingsPayload(**doc)
+
+
+@api_router.put("/settings", response_model=SettingsPayload)
+async def put_settings(payload: SettingsPayload):
+    await db.settings.replace_one(
+        {"_id": SETTINGS_DOC_ID}, {"_id": SETTINGS_DOC_ID, **payload.dict()}, upsert=True
+    )
+    return payload
+
+
+@api_router.post("/settings/backup")
+async def backup_settings():
+    # Mock backup: copy current settings to backups collection with timestamp
+    doc = await db.settings.find_one({"_id": SETTINGS_DOC_ID})
+    if not doc:
+        doc = {"_id": SETTINGS_DOC_ID, **DEFAULT_SETTINGS.dict()}
+    backup_doc = {"createdAt": datetime.utcnow(), "settings": doc}
+    result = await db.settings_backups.insert_one(backup_doc)
+    return {"message": "Backup created", "backup_id": str(result.inserted_id)}
+
+
+@api_router.post("/settings/restore")
+async def restore_settings():
+    # Mock restore: restore most recent backup if exists
+    latest = await db.settings_backups.find().sort("createdAt", -1).limit(1).to_list(1)
+    if not latest:
+        raise HTTPException(status_code=404, detail="No backups found")
+    settings_doc = latest[0]["settings"]
+    # Ensure correct _id
+    settings_doc["_id"] = SETTINGS_DOC_ID
+    await db.settings.replace_one({"_id": SETTINGS_DOC_ID}, settings_doc, upsert=True)
+    return {"message": "Settings restored", "restored_at": datetime.utcnow()}
+
+
+# =============================
+# Fast Input Support Endpoints
+# =============================
+
+@api_router.get("/customers/search")
+async def search_customers(q: str = ""):
+    """Search customers for autocomplete"""
+    if not q:
+        return []
+    
+    # Mock customer data for search
+    customers = [
+        {"id": "CUST-001", "name": "PT. ABC Indonesia", "email": "john@abcindonesia.com"},
+        {"id": "CUST-002", "name": "CV. XYZ Trading", "email": "jane@xyztrading.com"},
+        {"id": "CUST-003", "name": "Toko Maju Jaya", "email": "bob@majujaya.com"},
+        {"id": "CUST-004", "name": "PT. DEF Corp", "email": "alice@defcorp.com"},
+    ]
+    
+    # Filter customers based on search query
+    filtered = [
+        customer for customer in customers
+        if q.lower() in customer["name"].lower() or q.lower() in customer["email"].lower()
+    ]
+    
+    return filtered[:10]  # Limit to 10 results
+
+@api_router.get("/products/search")
+async def search_products(q: str = ""):
+    """Search products for autocomplete"""
+    if not q:
+        return []
+    
+    # Mock product data for search
+    products = [
+        {"id": "PROD-001", "name": "Product A", "sku": "PA001", "price": 100000},
+        {"id": "PROD-002", "name": "Product B", "sku": "PB002", "price": 200000},
+        {"id": "PROD-003", "name": "Product C", "sku": "PC003", "price": 300000},
+    ]
+    
+    # Filter products based on search query
+    filtered = [
+        product for product in products
+        if q.lower() in product["name"].lower() or q.lower() in product["sku"].lower()
+    ]
+    
+    return filtered[:10]  # Limit to 10 results
+
+@api_router.get("/vendors/search")
+async def search_vendors(q: str = ""):
+    """Search vendors for autocomplete"""
+    if not q:
+        return []
+    
+    # Mock vendor data for search
+    vendors = [
+        {"id": "VEND-001", "name": "Supplier A", "contact": "supplier-a@email.com"},
+        {"id": "VEND-002", "name": "Supplier B", "contact": "supplier-b@email.com"},
+        {"id": "VEND-003", "name": "Supplier C", "contact": "supplier-c@email.com"},
+    ]
+    
+    # Filter vendors based on search query
+    filtered = [
+        vendor for vendor in vendors
+        if q.lower() in vendor["name"].lower() or q.lower() in vendor["contact"].lower()
+    ]
+    
+    return filtered[:10]  # Limit to 10 results
+
+@api_router.get("/customers/{customer_id}")
+async def get_customer_by_id(customer_id: str):
+    """Get customer details for auto-fill"""
+    # Mock customer data
+    customers = {
+        "CUST-001": {
+            "id": "CUST-001",
+            "name": "PT. ABC Indonesia",
+            "contactPerson": "John Doe",
+            "email": "john@abcindonesia.com",
+            "phone": "+62 21 1234 5678",
+            "address": "Jl. Sudirman No. 123, Jakarta Pusat",
+            "city": "Jakarta",
+            "type": "Corporate",
+            "creditLimit": 100000000
+        },
+        "CUST-002": {
+            "id": "CUST-002",
+            "name": "CV. XYZ Trading",
+            "contactPerson": "Jane Smith",
+            "email": "jane@xyztrading.com",
+            "phone": "+62 31 9876 5432",
+            "address": "Jl. Thamrin No. 456, Surabaya",
+            "city": "Surabaya",
+            "type": "Corporate",
+            "creditLimit": 50000000
+        }
+    }
+    
+    customer = customers.get(customer_id)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    return customer
+
+@api_router.get("/products/{product_id}")
+async def get_product_by_id(product_id: str):
+    """Get product details for auto-fill"""
+    # Mock product data
+    products = {
+        "PROD-001": {
+            "id": "PROD-001",
+            "name": "Product A",
+            "sku": "PA001",
+            "price": 100000,
+            "description": "High quality product A",
+            "category": "Electronics",
+            "stock": 50
+        },
+        "PROD-002": {
+            "id": "PROD-002",
+            "name": "Product B",
+            "sku": "PB002",
+            "price": 200000,
+            "description": "Premium product B",
+            "category": "Accessories",
+            "stock": 25
+        }
+    }
+    
+    product = products.get(product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    return product

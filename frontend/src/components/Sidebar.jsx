@@ -149,7 +149,8 @@ const Sidebar = ({ activeModule, setActiveModule }) => {
       submenu: [
         { id: 'excel-processor', label: 'Excel to Module' },
         { id: 'data-modules', label: 'Data Modules' },
-        { id: 'api-builder', label: 'API Builder' }
+        { id: 'api-builder', label: 'API Builder' },
+        { id: 'fast-input-demo', label: 'Fast Input Demo' }
       ]
     },
     {

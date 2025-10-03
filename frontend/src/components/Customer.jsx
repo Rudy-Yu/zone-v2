@@ -23,11 +23,36 @@ import {
   DialogTrigger,
 } from './ui/dialog';
 import { Label } from './ui/label';
+import { FastInput, FastAutoComplete } from './ui/fast-input';
+import { useFastInput, formUtils, validationSchemas } from '../hooks/useFastInput';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 
 const Customer = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
+
+  // Fast input setup
+  const { handleAutoFill } = useFastInput();
+  
+  // Form setup dengan React Hook Form dan Zod
+  const form = useForm({
+    resolver: zodResolver(validationSchemas.customer),
+    defaultValues: {
+      name: '',
+      contactPerson: '',
+      email: '',
+      phone: '',
+      address: '',
+      city: '',
+      type: 'Corporate',
+      creditLimit: 0
+    }
+  });
+
+  // Field order untuk navigasi keyboard
+  const fieldOrder = ['name', 'contactPerson', 'email', 'phone', 'address', 'city', 'type', 'creditLimit'];
   
   const [customers, setCustomers] = useState([
     {
@@ -92,16 +117,30 @@ const Customer = () => {
     }
   ]);
 
-  const [newCustomer, setNewCustomer] = useState({
-    name: '',
-    contactPerson: '',
-    email: '',
-    phone: '',
-    address: '',
-    city: '',
-    type: 'Corporate',
-    creditLimit: 0
-  });
+  // Form submission handler
+  const onSubmit = (data) => {
+    const newId = formUtils.generateId('CUST', customers.map(c => c.id));
+    const customerData = {
+      ...data,
+      id: newId,
+      status: 'Active',
+      totalPurchases: 0,
+      lastPurchase: null,
+      createdAt: new Date().toISOString().split('T')[0]
+    };
+
+    if (editingCustomer) {
+      setCustomers(prev => prev.map(c => 
+        c.id === editingCustomer.id ? { ...c, ...customerData } : c
+      ));
+      setEditingCustomer(null);
+    } else {
+      setCustomers(prev => [...prev, customerData]);
+    }
+
+    form.reset();
+    setIsAddDialogOpen(false);
+  };
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -128,34 +167,27 @@ const Customer = () => {
     customer.city.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleAddCustomer = () => {
-    const customer = {
-      id: `CUST-${String(customers.length + 1).padStart(3, '0')}`,
-      ...newCustomer,
-      status: 'Active',
-      totalPurchases: 0,
-      lastPurchase: null,
-      createdAt: new Date().toISOString().split('T')[0]
-    };
-    
-    setCustomers([...customers, customer]);
-    setNewCustomer({
-      name: '',
-      contactPerson: '',
-      email: '',
-      phone: '',
-      address: '',
-      city: '',
-      type: 'Corporate',
-      creditLimit: 0
-    });
-    setIsAddDialogOpen(false);
-  };
-
   const handleEditCustomer = (customer) => {
     setEditingCustomer(customer);
-    setNewCustomer(customer);
+    form.reset(customer);
     setIsAddDialogOpen(true);
+  };
+
+  const handleFormKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      const currentField = e.target.name;
+      const currentIndex = fieldOrder.indexOf(currentField);
+      
+      if (currentIndex < fieldOrder.length - 1) {
+        const nextField = document.querySelector(`[name="${fieldOrder[currentIndex + 1]}"]`);
+        if (nextField) {
+          nextField.focus();
+        }
+      } else {
+        form.handleSubmit(onSubmit)();
+      }
+    }
   };
 
   const handleUpdateCustomer = () => {
@@ -196,92 +228,103 @@ const Customer = () => {
                 {editingCustomer ? 'Update informasi customer' : 'Masukkan informasi customer baru'}
               </DialogDescription>
             </DialogHeader>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Nama Perusahaan *</Label>
-                <Input
-                  id="name"
-                  value={newCustomer.name}
-                  onChange={(e) => setNewCustomer({...newCustomer, name: e.target.value})}
-                  placeholder="Nama perusahaan"
-                />
+            <form onSubmit={form.handleSubmit(onSubmit)} onKeyDown={handleFormKeyDown}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Nama Perusahaan *</Label>
+                  <Input
+                    {...form.register("name")}
+                    id="name"
+                    placeholder="Nama perusahaan"
+                    autoFocus
+                  />
+                  {form.formState.errors.name && (
+                    <p className="text-sm text-red-500">{form.formState.errors.name.message}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="contactPerson">Contact Person *</Label>
+                  <Input
+                    {...form.register("contactPerson")}
+                    id="contactPerson"
+                    placeholder="Nama contact person"
+                  />
+                  {form.formState.errors.contactPerson && (
+                    <p className="text-sm text-red-500">{form.formState.errors.contactPerson.message}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email *</Label>
+                  <Input
+                    {...form.register("email")}
+                    id="email"
+                    type="email"
+                    placeholder="email@company.com"
+                  />
+                  {form.formState.errors.email && (
+                    <p className="text-sm text-red-500">{form.formState.errors.email.message}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">No. Telepon *</Label>
+                  <FastInput
+                    name="phone"
+                    label=""
+                    mask="phone"
+                    placeholder="+62 xxx xxxx xxxx"
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="address">Alamat *</Label>
+                  <Input
+                    {...form.register("address")}
+                    id="address"
+                    placeholder="Alamat lengkap"
+                  />
+                  {form.formState.errors.address && (
+                    <p className="text-sm text-red-500">{form.formState.errors.address.message}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="city">Kota *</Label>
+                  <Input
+                    {...form.register("city")}
+                    id="city"
+                    placeholder="Kota"
+                  />
+                  {form.formState.errors.city && (
+                    <p className="text-sm text-red-500">{form.formState.errors.city.message}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="type">Tipe Customer</Label>
+                  <select
+                    {...form.register("type")}
+                    id="type"
+                    className="w-full p-2 border rounded-md"
+                  >
+                    <option value="Corporate">Corporate</option>
+                    <option value="Retail">Retail</option>
+                    <option value="Individual">Individual</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="creditLimit">Credit Limit (Rp)</Label>
+                  <FastInput
+                    name="creditLimit"
+                    label=""
+                    mask="currency"
+                    placeholder="0"
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="contactPerson">Contact Person *</Label>
-                <Input
-                  id="contactPerson"
-                  value={newCustomer.contactPerson}
-                  onChange={(e) => setNewCustomer({...newCustomer, contactPerson: e.target.value})}
-                  placeholder="Nama contact person"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email *</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={newCustomer.email}
-                  onChange={(e) => setNewCustomer({...newCustomer, email: e.target.value})}
-                  placeholder="email@company.com"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="phone">No. Telepon *</Label>
-                <Input
-                  id="phone"
-                  value={newCustomer.phone}
-                  onChange={(e) => setNewCustomer({...newCustomer, phone: e.target.value})}
-                  placeholder="+62 xxx xxxx xxxx"
-                />
-              </div>
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="address">Alamat *</Label>
-                <Input
-                  id="address"
-                  value={newCustomer.address}
-                  onChange={(e) => setNewCustomer({...newCustomer, address: e.target.value})}
-                  placeholder="Alamat lengkap"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="city">Kota *</Label>
-                <Input
-                  id="city"
-                  value={newCustomer.city}
-                  onChange={(e) => setNewCustomer({...newCustomer, city: e.target.value})}
-                  placeholder="Kota"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="type">Tipe Customer</Label>
-                <select
-                  id="type"
-                  value={newCustomer.type}
-                  onChange={(e) => setNewCustomer({...newCustomer, type: e.target.value})}
-                  className="w-full p-2 border rounded-md"
-                >
-                  <option value="Corporate">Corporate</option>
-                  <option value="Retail">Retail</option>
-                  <option value="Individual">Individual</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="creditLimit">Credit Limit (Rp)</Label>
-                <Input
-                  id="creditLimit"
-                  type="number"
-                  value={newCustomer.creditLimit}
-                  onChange={(e) => setNewCustomer({...newCustomer, creditLimit: parseInt(e.target.value) || 0})}
-                  placeholder="0"
-                />
-              </div>
-            </div>
+            </form>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                 Cancel
               </Button>
               <Button 
-                onClick={editingCustomer ? handleUpdateCustomer : handleAddCustomer}
+                onClick={form.handleSubmit(onSubmit)}
                 className="bg-red-500 hover:bg-red-600 text-white"
               >
                 {editingCustomer ? 'Update Customer' : 'Tambah Customer'}

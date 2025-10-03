@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Save, RefreshCw, Database, Globe, Mail, Bell, Shield, Palette, Download, Upload, AlertTriangle } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -9,6 +9,9 @@ import { Label } from './ui/label';
 
 const Settings = () => {
   const [activeTab, setActiveTab] = useState('general');
+  const API = (process.env.REACT_APP_BACKEND_URL ? `${process.env.REACT_APP_BACKEND_URL}/api` : 'http://localhost:8000/api');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [settings, setSettings] = useState({
     general: {
       companyName: 'ZONE v.2',
@@ -77,6 +80,25 @@ const Settings = () => {
 
   const [hasChanges, setHasChanges] = useState(false);
 
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await fetch(`${API}/settings`);
+        if (!res.ok) throw new Error(`Failed to load settings (${res.status})`);
+        const data = await res.json();
+        setSettings(data);
+        setHasChanges(false);
+      } catch (e) {
+        setError(String(e));
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadSettings();
+  }, []);
+
   const handleSettingChange = (category, key, value) => {
     setSettings(prev => ({
       ...prev,
@@ -88,28 +110,90 @@ const Settings = () => {
     setHasChanges(true);
   };
 
-  const handleSaveSettings = () => {
-    // In real implementation, this would save to backend
-    console.log('Saving settings:', settings);
-    setHasChanges(false);
-    alert('Settings saved successfully!');
-  };
-
-  const handleResetSettings = () => {
-    if (confirm('Are you sure you want to reset all settings to default?')) {
-      // Reset to default values
-      setHasChanges(true);
+  const handleSaveSettings = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await fetch(`${API}/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings)
+      });
+      if (!res.ok) {
+        let info = '';
+        try { info = await res.text(); } catch {}
+        throw new Error(`Failed to save settings (${res.status}) ${info}`);
+      }
+      const data = await res.json();
+      setSettings(data);
+      setHasChanges(false);
+      alert('Settings saved successfully!');
+    } catch (e) {
+      setError(String(e));
+      alert(String(e));
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleBackupDatabase = () => {
-    // In real implementation, this would trigger database backup
-    alert('Database backup started. You will be notified when complete.');
+  const handleResetSettings = async () => {
+    if (confirm('Are you sure you want to discard unsaved changes and reload from server?')) {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await fetch(`${API}/settings`);
+        if (!res.ok) throw new Error(`Failed to reload settings (${res.status})`);
+        const data = await res.json();
+        setSettings(data);
+        setHasChanges(false);
+      } catch (e) {
+        setError(String(e));
+      } finally {
+        setLoading(false);
+      }
+    }
   };
 
-  const handleRestoreDatabase = () => {
-    // In real implementation, this would open file picker for backup file
-    alert('Please select a backup file to restore from.');
+  const handleBackupDatabase = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await fetch(`${API}/settings/backup`, { method: 'POST' });
+      if (!res.ok) throw new Error(`Failed to create backup (${res.status})`);
+      const data = await res.json();
+      alert('Backup created successfully');
+      // update lastBackup in UI
+      setSettings(prev => ({
+        ...prev,
+        database: { ...prev.database, lastBackup: new Date().toISOString().slice(0, 19).replace('T', ' ') }
+      }));
+    } catch (e) {
+      setError(String(e));
+      alert('Failed to create backup.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRestoreDatabase = async () => {
+    if (!confirm('Restore the most recent backup? Current settings will be overwritten.')) return;
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await fetch(`${API}/settings/restore`, { method: 'POST' });
+      if (!res.ok) throw new Error(`Failed to restore settings (${res.status})`);
+      // reload settings after restore
+      const reload = await fetch(`${API}/settings`);
+      const data = await reload.json();
+      setSettings(data);
+      setHasChanges(false);
+      alert('Settings restored from backup.');
+    } catch (e) {
+      setError(String(e));
+      alert('Failed to restore settings.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -128,7 +212,7 @@ const Settings = () => {
           <Button 
             className="bg-red-500 hover:bg-red-600 text-white"
             onClick={handleSaveSettings}
-            disabled={!hasChanges}
+            disabled={!hasChanges || loading}
           >
             <Save className="h-4 w-4 mr-2" />
             Save Settings
@@ -743,6 +827,16 @@ const Settings = () => {
             <div className="flex items-center gap-2 text-yellow-800">
               <AlertTriangle className="h-4 w-4" />
               <span>You have unsaved changes. Don't forget to save your settings.</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {error && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-red-800">
+              <AlertTriangle className="h-4 w-4" />
+              <span>{error}</span>
             </div>
           </CardContent>
         </Card>
