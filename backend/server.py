@@ -9,6 +9,9 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Any, Dict
 import uuid
 from datetime import datetime, timedelta
+from pdf_generator import PDFGenerator
+import tempfile
+import os
 
 
 ROOT_DIR = Path(__file__).parent
