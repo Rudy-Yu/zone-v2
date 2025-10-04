@@ -428,8 +428,8 @@ const Dashboard = ({ setActiveModule }) => {
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex justify-between items-start">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">Dashboard</h1>
+      <div>
+        <h1 className="text-2xl font-bold text-gray-800 mb-2">Dashboard</h1>
           <p className="text-gray-600">
             Selamat datang kembali! Berikut ringkasan bisnis Anda hari ini.
             {error && (

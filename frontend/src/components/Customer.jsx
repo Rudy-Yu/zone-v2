@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Search, Edit, Trash2, Eye, Phone, Mail, MapPin, Building, User } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -23,123 +23,151 @@ import {
   DialogTrigger,
 } from './ui/dialog';
 import { Label } from './ui/label';
-import { FastInput, FastAutoComplete } from './ui/fast-input';
-import { useFastInput, formUtils, validationSchemas } from '../hooks/useFastInput';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 
 const Customer = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Fast input setup
-  const { handleAutoFill } = useFastInput();
+  // API configuration
+  const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+  const API_URL = `${BACKEND_URL}/api`;
+
   
   // Form setup dengan React Hook Form dan Zod
   const form = useForm({
-    resolver: zodResolver(validationSchemas.customer),
     defaultValues: {
       name: '',
-      contactPerson: '',
+      contact_person: '',
       email: '',
       phone: '',
       address: '',
       city: '',
       type: 'Corporate',
-      creditLimit: 0
+      credit_limit: 0
     }
   });
 
   // Field order untuk navigasi keyboard
-  const fieldOrder = ['name', 'contactPerson', 'email', 'phone', 'address', 'city', 'type', 'creditLimit'];
+  const fieldOrder = ['name', 'contact_person', 'email', 'phone', 'address', 'city', 'type', 'credit_limit'];
   
-  const [customers, setCustomers] = useState([
-    {
-      id: 'CUST-001',
-      name: 'PT. ABC Indonesia',
-      contactPerson: 'John Doe',
-      email: 'john@abcindonesia.com',
-      phone: '+62 21 1234 5678',
-      address: 'Jl. Sudirman No. 123, Jakarta Pusat',
-      city: 'Jakarta',
-      type: 'Corporate',
-      status: 'Active',
-      creditLimit: 100000000,
-      totalPurchases: 45000000,
-      lastPurchase: '2024-01-15',
-      createdAt: '2023-06-15'
-    },
-    {
-      id: 'CUST-002',
-      name: 'CV. XYZ Trading',
-      contactPerson: 'Jane Smith',
-      email: 'jane@xyztrading.com',
-      phone: '+62 31 9876 5432',
-      address: 'Jl. Thamrin No. 456, Surabaya',
-      city: 'Surabaya',
-      type: 'Corporate',
-      status: 'Active',
-      creditLimit: 50000000,
-      totalPurchases: 28000000,
-      lastPurchase: '2024-01-10',
-      createdAt: '2023-08-20'
-    },
-    {
-      id: 'CUST-003',
-      name: 'Toko Maju Jaya',
-      contactPerson: 'Bob Wilson',
-      email: 'bob@majujaya.com',
-      phone: '+62 22 5555 7777',
-      address: 'Jl. Asia Afrika No. 789, Bandung',
-      city: 'Bandung',
-      type: 'Retail',
-      status: 'Active',
-      creditLimit: 25000000,
-      totalPurchases: 15000000,
-      lastPurchase: '2024-01-12',
-      createdAt: '2023-09-10'
-    },
-    {
-      id: 'CUST-004',
-      name: 'PT. DEF Corp',
-      contactPerson: 'Alice Brown',
-      email: 'alice@defcorp.com',
-      phone: '+62 61 1111 2222',
-      address: 'Jl. Gatot Subroto No. 321, Medan',
-      city: 'Medan',
-      type: 'Corporate',
-      status: 'Inactive',
-      creditLimit: 75000000,
-      totalPurchases: 35000000,
-      lastPurchase: '2023-12-20',
-      createdAt: '2023-07-05'
+  const [customers, setCustomers] = useState([]);
+
+  // Fetch customers from API
+  useEffect(() => {
+    fetchCustomers();
+  }, []);
+
+  const fetchCustomers = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_URL}/customers`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      setCustomers(data);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching customers:', err);
+      setError(err.message);
+      // Fallback to mock data if API fails
+      setCustomers([
+        {
+          id: 'CUST-001',
+          name: 'PT. ABC Indonesia',
+          contact_person: 'John Doe',
+          email: 'john@abcindonesia.com',
+          phone: '+62 21 1234 5678',
+          address: 'Jl. Sudirman No. 123, Jakarta Pusat',
+          city: 'Jakarta',
+          type: 'Corporate',
+          status: 'Active',
+          credit_limit: 100000000,
+          total_purchases: 45000000,
+          last_purchase: '2024-01-15',
+          created_at: '2023-06-15'
+        },
+        {
+          id: 'CUST-002',
+          name: 'CV. XYZ Trading',
+          contact_person: 'Jane Smith',
+          email: 'jane@xyztrading.com',
+          phone: '+62 31 9876 5432',
+          address: 'Jl. Thamrin No. 456, Surabaya',
+          city: 'Surabaya',
+          type: 'Corporate',
+          status: 'Active',
+          credit_limit: 50000000,
+          total_purchases: 28000000,
+          last_purchase: '2024-01-10',
+          created_at: '2023-08-20'
+        }
+      ]);
+    } finally {
+      setLoading(false);
     }
-  ]);
+  };
 
   // Form submission handler
-  const onSubmit = (data) => {
-    const newId = formUtils.generateId('CUST', customers.map(c => c.id));
-    const customerData = {
-      ...data,
-      id: newId,
-      status: 'Active',
-      totalPurchases: 0,
-      lastPurchase: null,
-      createdAt: new Date().toISOString().split('T')[0]
-    };
+  const onSubmit = async (data) => {
+    try {
+      console.log('Submitting customer data:', data);
+      
+      if (editingCustomer) {
+        // Update existing customer
+        const response = await fetch(`${API_URL}/customers/${editingCustomer.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(data)
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+        }
+        
+        const updatedCustomer = await response.json();
+        setCustomers(prev => prev.map(c => 
+          c.id === editingCustomer.id ? updatedCustomer : c
+        ));
+        setEditingCustomer(null);
+        console.log('Customer updated successfully');
+      } else {
+        // Create new customer
+        const response = await fetch(`${API_URL}/customers`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(data)
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+        }
+        
+        const newCustomer = await response.json();
+        setCustomers(prev => [...prev, newCustomer]);
+        console.log('Customer created successfully');
+      }
 
-    if (editingCustomer) {
-      setCustomers(prev => prev.map(c => 
-        c.id === editingCustomer.id ? { ...c, ...customerData } : c
-      ));
-      setEditingCustomer(null);
-    } else {
-      setCustomers(prev => [...prev, customerData]);
+      form.reset();
+      setIsAddDialogOpen(false);
+      setError(null);
+    } catch (err) {
+      console.error('Error saving customer:', err);
+      setError(err.message);
+      alert(`Error: ${err.message}`);
     }
-
-    form.reset();
-    setIsAddDialogOpen(false);
   };
 
   const getStatusColor = (status) => {
@@ -162,7 +190,7 @@ const Customer = () => {
 
   const filteredCustomers = customers.filter(customer =>
     customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    customer.contactPerson.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    customer.contact_person.toLowerCase().includes(searchTerm.toLowerCase()) ||
     customer.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     customer.city.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -190,19 +218,58 @@ const Customer = () => {
     }
   };
 
-  const handleUpdateCustomer = () => {
-    setCustomers(customers.map(cust => 
-      cust.id === editingCustomer.id ? { ...cust, ...newCustomer } : cust
-    ));
-    setEditingCustomer(null);
-    setIsAddDialogOpen(false);
-  };
 
-  const handleDeleteCustomer = (customerId) => {
+  const handleDeleteCustomer = async (customerId) => {
     if (confirm('Apakah Anda yakin ingin menghapus customer ini?')) {
-      setCustomers(customers.filter(cust => cust.id !== customerId));
+      try {
+        const response = await fetch(`${API_URL}/customers/${customerId}`, {
+          method: 'DELETE'
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        setCustomers(customers.filter(cust => cust.id !== customerId));
+      } catch (err) {
+        console.error('Error deleting customer:', err);
+        setError(err.message);
+      }
     }
   };
+
+  if (loading) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Memuat data customer...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && customers.length === 0) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="text-red-500 text-6xl mb-4">⚠️</div>
+            <h2 className="text-xl font-semibold text-gray-800 mb-2">Gagal Memuat Data</h2>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <button 
+              onClick={fetchCustomers}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Coba Lagi
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -210,7 +277,14 @@ const Customer = () => {
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 mb-2">Customer Management</h1>
-          <p className="text-gray-600">Kelola data customer dan informasi kontak</p>
+          <p className="text-gray-600">
+            Kelola data customer dan informasi kontak
+            {error && (
+              <span className="ml-2 text-orange-600 text-sm">
+                (Menggunakan data offline)
+              </span>
+            )}
+          </p>
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
@@ -243,14 +317,14 @@ const Customer = () => {
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="contactPerson">Contact Person *</Label>
+                  <Label htmlFor="contact_person">Contact Person *</Label>
                   <Input
-                    {...form.register("contactPerson")}
-                    id="contactPerson"
+                    {...form.register("contact_person")}
+                    id="contact_person"
                     placeholder="Nama contact person"
                   />
-                  {form.formState.errors.contactPerson && (
-                    <p className="text-sm text-red-500">{form.formState.errors.contactPerson.message}</p>
+                  {form.formState.errors.contact_person && (
+                    <p className="text-sm text-red-500">{form.formState.errors.contact_person.message}</p>
                   )}
                 </div>
                 <div className="space-y-2">
@@ -267,12 +341,14 @@ const Customer = () => {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="phone">No. Telepon *</Label>
-                  <FastInput
-                    name="phone"
-                    label=""
-                    mask="phone"
+                  <Input
+                    {...form.register("phone")}
+                    id="phone"
                     placeholder="+62 xxx xxxx xxxx"
                   />
+                  {form.formState.errors.phone && (
+                    <p className="text-sm text-red-500">{form.formState.errors.phone.message}</p>
+                  )}
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="address">Alamat *</Label>
@@ -309,13 +385,16 @@ const Customer = () => {
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="creditLimit">Credit Limit (Rp)</Label>
-                  <FastInput
-                    name="creditLimit"
-                    label=""
-                    mask="currency"
+                  <Label htmlFor="credit_limit">Credit Limit (Rp)</Label>
+                  <Input
+                    {...form.register("credit_limit")}
+                    id="credit_limit"
+                    type="number"
                     placeholder="0"
                   />
+                  {form.formState.errors.credit_limit && (
+                    <p className="text-sm text-red-500">{form.formState.errors.credit_limit.message}</p>
+                  )}
                 </div>
               </div>
             </form>
@@ -442,7 +521,7 @@ const Customer = () => {
                       <div className="text-sm text-gray-500">{customer.address}</div>
                     </div>
                   </TableCell>
-                  <TableCell>{customer.contactPerson}</TableCell>
+                  <TableCell>{customer.contact_person}</TableCell>
                   <TableCell>
                     <div className="space-y-1">
                       <div className="flex items-center gap-1 text-sm">
@@ -471,8 +550,8 @@ const Customer = () => {
                       {customer.status}
                     </Badge>
                   </TableCell>
-                  <TableCell>Rp {customer.creditLimit.toLocaleString()}</TableCell>
-                  <TableCell>Rp {customer.totalPurchases.toLocaleString()}</TableCell>
+                  <TableCell>Rp {customer.credit_limit.toLocaleString()}</TableCell>
+                  <TableCell>Rp {customer.total_purchases.toLocaleString()}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
                       <Button variant="ghost" size="sm">

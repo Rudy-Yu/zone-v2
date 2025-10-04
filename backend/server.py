@@ -15,15 +15,37 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB connection
-mongo_url = os.environ['MONGO_URL']
+mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
+db_name = os.environ.get('DB_NAME', 'zone_db')
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+db = client[db_name]
 
 # Create the main app without a prefix
 app = FastAPI()
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Test endpoint
+@app.get("/")
+async def root():
+    return {"message": "ZONE v.2 API is running"}
+
+@app.get("/health")
+async def health():
+    return {"status": "healthy"}
+
+# Include the router in the app
+app.include_router(api_router)
 
 
 # Define Models
@@ -63,6 +85,97 @@ class DashboardData(BaseModel):
     stats: DashboardStats
     recent_transactions: List[Transaction]
     cash_flow_data: List[ChartDataPoint]
+
+# Sales Models
+class Customer(BaseModel):
+    id: str
+    name: str
+    contact_person: str
+    email: str
+    phone: str
+    address: str
+    city: str
+    type: str  # Corporate, Retail, Individual
+    status: str  # Active, Inactive, Suspended
+    credit_limit: float
+    total_purchases: float
+    last_purchase: Optional[str]
+    created_at: str
+
+class CustomerCreate(BaseModel):
+    name: str
+    contact_person: str
+    email: str
+    phone: str
+    address: str
+    city: str
+    type: str = "Corporate"
+    credit_limit: float = 0
+
+class SalesInvoice(BaseModel):
+    id: str
+    customer_id: str
+    customer_name: str
+    invoice_date: str
+    due_date: str
+    amount: float
+    status: str  # Paid, Pending, Overdue, Draft
+    items: List[Dict]
+    created_by: str
+    created_at: str
+
+class SalesInvoiceCreate(BaseModel):
+    customer_id: str
+    invoice_date: str
+    due_date: str
+    items: List[Dict]
+    notes: Optional[str] = ""
+
+class SalesOrder(BaseModel):
+    id: str
+    order_number: str
+    customer_id: str
+    customer_name: str
+    order_date: str
+    delivery_date: str
+    status: str  # Draft, Confirmed, Processing, Shipped, Delivered, Cancelled
+    total_amount: float
+    items: List[Dict]
+    created_by: str
+    notes: Optional[str] = ""
+    created_at: str
+
+class SalesOrderCreate(BaseModel):
+    customer_id: str
+    customer_name: str
+    order_date: str
+    delivery_date: str
+    items: List[Dict]
+    notes: Optional[str] = ""
+
+class Quotation(BaseModel):
+    id: str
+    quotation_number: str
+    customer_id: str
+    customer_name: str
+    quotation_date: str
+    valid_until: str
+    status: str  # Draft, Sent, Accepted, Rejected, Expired
+    total_amount: float
+    items: List[Dict]
+    created_by: str
+    notes: Optional[str] = ""
+    created_at: str
+    sent_date: Optional[str] = None
+    accepted_date: Optional[str] = None
+
+class QuotationCreate(BaseModel):
+    customer_id: str
+    customer_name: str
+    quotation_date: str
+    valid_until: str
+    items: List[Dict]
+    notes: Optional[str] = ""
 
 # Add your routes to the router instead of directly to app
 @api_router.get("/")
@@ -437,3 +550,390 @@ async def get_product_by_id(product_id: str):
         raise HTTPException(status_code=404, detail="Product not found")
     
     return product
+
+# Sales API Endpoints
+
+# Customer Endpoints
+@api_router.get("/customers", response_model=List[Customer])
+async def get_customers():
+    """Get all customers"""
+    # Mock data for now - in production, this would come from database
+    customers = [
+        {
+            "id": "CUST-001",
+            "name": "PT. ABC Indonesia",
+            "contact_person": "John Doe",
+            "email": "john@abcindonesia.com",
+            "phone": "+62 21 1234 5678",
+            "address": "Jl. Sudirman No. 123, Jakarta Pusat",
+            "city": "Jakarta",
+            "type": "Corporate",
+            "status": "Active",
+            "credit_limit": 100000000,
+            "total_purchases": 45000000,
+            "last_purchase": "2024-01-15",
+            "created_at": "2023-06-15"
+        },
+        {
+            "id": "CUST-002",
+            "name": "CV. XYZ Trading",
+            "contact_person": "Jane Smith",
+            "email": "jane@xyztrading.com",
+            "phone": "+62 31 9876 5432",
+            "address": "Jl. Thamrin No. 456, Surabaya",
+            "city": "Surabaya",
+            "type": "Corporate",
+            "status": "Active",
+            "credit_limit": 50000000,
+            "total_purchases": 28000000,
+            "last_purchase": "2024-01-10",
+            "created_at": "2023-08-20"
+        },
+        {
+            "id": "CUST-003",
+            "name": "Toko Maju Jaya",
+            "contact_person": "Bob Wilson",
+            "email": "bob@majujaya.com",
+            "phone": "+62 22 5555 7777",
+            "address": "Jl. Asia Afrika No. 789, Bandung",
+            "city": "Bandung",
+            "type": "Retail",
+            "status": "Active",
+            "credit_limit": 25000000,
+            "total_purchases": 15000000,
+            "last_purchase": "2024-01-12",
+            "created_at": "2023-09-10"
+        }
+    ]
+    return customers
+
+@api_router.post("/customers", response_model=Customer)
+async def create_customer(customer: CustomerCreate):
+    """Create a new customer"""
+    new_customer = Customer(
+        id=f"CUST-{str(uuid.uuid4())[:8].upper()}",
+        name=customer.name,
+        contact_person=customer.contact_person,
+        email=customer.email,
+        phone=customer.phone,
+        address=customer.address,
+        city=customer.city,
+        type=customer.type,
+        status="Active",
+        credit_limit=customer.credit_limit,
+        total_purchases=0,
+        last_purchase=None,
+        created_at=datetime.utcnow().isoformat()
+    )
+    # In production, save to database
+    return new_customer
+
+@api_router.get("/customers/{customer_id}", response_model=Customer)
+async def get_customer(customer_id: str):
+    """Get customer by ID"""
+    # Mock data - in production, fetch from database
+    customers = {
+        "CUST-001": {
+            "id": "CUST-001",
+            "name": "PT. ABC Indonesia",
+            "contact_person": "John Doe",
+            "email": "john@abcindonesia.com",
+            "phone": "+62 21 1234 5678",
+            "address": "Jl. Sudirman No. 123, Jakarta Pusat",
+            "city": "Jakarta",
+            "type": "Corporate",
+            "status": "Active",
+            "credit_limit": 100000000,
+            "total_purchases": 45000000,
+            "last_purchase": "2024-01-15",
+            "created_at": "2023-06-15"
+        }
+    }
+    
+    customer = customers.get(customer_id)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    return customer
+
+@api_router.put("/customers/{customer_id}", response_model=Customer)
+async def update_customer(customer_id: str, customer: CustomerCreate):
+    """Update customer"""
+    # In production, update in database
+    updated_customer = Customer(
+        id=customer_id,
+        name=customer.name,
+        contact_person=customer.contact_person,
+        email=customer.email,
+        phone=customer.phone,
+        address=customer.address,
+        city=customer.city,
+        type=customer.type,
+        status="Active",
+        credit_limit=customer.credit_limit,
+        total_purchases=0,
+        last_purchase=None,
+        created_at=datetime.utcnow().isoformat()
+    )
+    return updated_customer
+
+@api_router.delete("/customers/{customer_id}")
+async def delete_customer(customer_id: str):
+    """Delete customer"""
+    # In production, delete from database
+    return {"message": "Customer deleted successfully"}
+
+# Sales Invoice Endpoints
+@api_router.get("/sales-invoices", response_model=List[SalesInvoice])
+async def get_sales_invoices():
+    """Get all sales invoices"""
+    # Mock data for now - in production, this would come from database
+    invoices = [
+        {
+            "id": "INV-001",
+            "customer_id": "CUST-001",
+            "customer_name": "PT. ABC Indonesia",
+            "invoice_date": "2024-01-20",
+            "due_date": "2024-02-19",
+            "amount": 15000000,
+            "status": "Paid",
+            "items": [
+                {"product_id": "PRD-001", "product_name": "Laptop Gaming", "quantity": 1, "unit_price": 15000000, "total": 15000000}
+            ],
+            "created_by": "John Sales",
+            "created_at": "2024-01-20 10:30:00"
+        },
+        {
+            "id": "INV-002",
+            "customer_id": "CUST-002",
+            "customer_name": "CV. XYZ Trading",
+            "invoice_date": "2024-01-19",
+            "due_date": "2024-02-18",
+            "amount": 8500000,
+            "status": "Pending",
+            "items": [
+                {"product_id": "PRD-002", "product_name": "Mouse Wireless", "quantity": 5, "unit_price": 250000, "total": 1250000},
+                {"product_id": "PRD-003", "product_name": "Keyboard Mechanical", "quantity": 3, "unit_price": 1200000, "total": 3600000}
+            ],
+            "created_by": "Jane Sales",
+            "created_at": "2024-01-19 14:15:00"
+        },
+        {
+            "id": "INV-003",
+            "customer_id": "CUST-003",
+            "customer_name": "Toko Maju Jaya",
+            "invoice_date": "2024-01-18",
+            "due_date": "2024-02-17",
+            "amount": 22100000,
+            "status": "Overdue",
+            "items": [
+                {"product_id": "PRD-001", "product_name": "Laptop Gaming", "quantity": 1, "unit_price": 15000000, "total": 15000000},
+                {"product_id": "PRD-004", "product_name": "Monitor 27\"", "quantity": 2, "unit_price": 3500000, "total": 7000000}
+            ],
+            "created_by": "Bob Sales",
+            "created_at": "2024-01-18 09:45:00"
+        }
+    ]
+    return invoices
+
+@api_router.post("/sales-invoices", response_model=SalesInvoice)
+async def create_sales_invoice(invoice: SalesInvoiceCreate):
+    """Create a new sales invoice"""
+    new_invoice = SalesInvoice(
+        id=f"INV-{str(uuid.uuid4())[:8].upper()}",
+        customer_id=invoice.customer_id,
+        customer_name="",  # Will be populated from customer data
+        invoice_date=invoice.invoice_date,
+        due_date=invoice.due_date,
+        amount=sum(item.get('total', 0) for item in invoice.items),
+        status="Draft",
+        items=invoice.items,
+        created_by="Current User",
+        created_at=datetime.utcnow().isoformat()
+    )
+    # In production, save to database
+    return new_invoice
+
+@api_router.get("/sales-invoices/{invoice_id}", response_model=SalesInvoice)
+async def get_sales_invoice(invoice_id: str):
+    """Get sales invoice by ID"""
+    # Mock data - in production, fetch from database
+    invoices = {
+        "INV-001": {
+            "id": "INV-001",
+            "customer_id": "CUST-001",
+            "customer_name": "PT. ABC Indonesia",
+            "invoice_date": "2024-01-20",
+            "due_date": "2024-02-19",
+            "amount": 15000000,
+            "status": "Paid",
+            "items": [
+                {"product_id": "PRD-001", "product_name": "Laptop Gaming", "quantity": 1, "unit_price": 15000000, "total": 15000000}
+            ],
+            "created_by": "John Sales",
+            "created_at": "2024-01-20 10:30:00"
+        }
+    }
+    
+    invoice = invoices.get(invoice_id)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Sales invoice not found")
+    
+    return invoice
+
+@api_router.put("/sales-invoices/{invoice_id}", response_model=SalesInvoice)
+async def update_sales_invoice(invoice_id: str, invoice: SalesInvoiceCreate):
+    """Update sales invoice"""
+    # In production, update in database
+    updated_invoice = SalesInvoice(
+        id=invoice_id,
+        customer_id=invoice.customer_id,
+        customer_name="",  # Will be populated from customer data
+        invoice_date=invoice.invoice_date,
+        due_date=invoice.due_date,
+        amount=sum(item.get('total', 0) for item in invoice.items),
+        status="Draft",
+        items=invoice.items,
+        created_by="Current User",
+        created_at=datetime.utcnow().isoformat()
+    )
+    return updated_invoice
+
+@api_router.delete("/sales-invoices/{invoice_id}")
+async def delete_sales_invoice(invoice_id: str):
+    """Delete sales invoice"""
+    # In production, delete from database
+    return {"message": "Sales invoice deleted successfully"}
+
+# Sales Order Endpoints
+@api_router.get("/sales-orders", response_model=List[SalesOrder])
+async def get_sales_orders():
+    """Get all sales orders"""
+    # Mock data for now - in production, this would come from database
+    orders = [
+        {
+            "id": "SO-001",
+            "order_number": "SO-2024-001",
+            "customer_id": "CUST-001",
+            "customer_name": "PT. ABC Indonesia",
+            "order_date": "2024-01-20",
+            "delivery_date": "2024-01-25",
+            "status": "Confirmed",
+            "total_amount": 45000000,
+            "items": [
+                {"product_id": "PRD-001", "product_name": "Laptop Gaming", "quantity": 2, "unit_price": 15000000, "total": 30000000},
+                {"product_id": "PRD-002", "product_name": "Mouse Wireless", "quantity": 5, "unit_price": 250000, "total": 1250000}
+            ],
+            "created_by": "John Sales",
+            "notes": "Priority delivery required",
+            "created_at": "2024-01-20 10:30:00"
+        },
+        {
+            "id": "SO-002",
+            "order_number": "SO-2024-002",
+            "customer_id": "CUST-002",
+            "customer_name": "CV. XYZ Trading",
+            "order_date": "2024-01-19",
+            "delivery_date": "2024-01-24",
+            "status": "Processing",
+            "total_amount": 28000000,
+            "items": [
+                {"product_id": "PRD-003", "product_name": "Keyboard Mechanical", "quantity": 10, "unit_price": 1200000, "total": 12000000},
+                {"product_id": "PRD-004", "product_name": "Monitor 27\"", "quantity": 8, "unit_price": 2000000, "total": 16000000}
+            ],
+            "created_by": "Jane Sales",
+            "notes": "Standard delivery",
+            "created_at": "2024-01-19 14:15:00"
+        }
+    ]
+    return orders
+
+@api_router.post("/sales-orders", response_model=SalesOrder)
+async def create_sales_order(order: SalesOrderCreate):
+    """Create a new sales order"""
+    new_order = SalesOrder(
+        id=f"SO-{str(uuid.uuid4())[:8].upper()}",
+        order_number=f"SO-2024-{str(uuid.uuid4())[:8].upper()}",
+        customer_id=order.customer_id,
+        customer_name=order.customer_name,
+        order_date=order.order_date,
+        delivery_date=order.delivery_date,
+        status="Draft",
+        total_amount=sum(item.get('total', 0) for item in order.items),
+        items=order.items,
+        created_by="Current User",
+        notes=order.notes,
+        created_at=datetime.utcnow().isoformat()
+    )
+    # In production, save to database
+    return new_order
+
+# Quotation Endpoints
+@api_router.get("/quotations", response_model=List[Quotation])
+async def get_quotations():
+    """Get all quotations"""
+    # Mock data for now - in production, this would come from database
+    quotations = [
+        {
+            "id": "QUO-001",
+            "quotation_number": "QUO-2024-001",
+            "customer_id": "CUST-001",
+            "customer_name": "PT. ABC Indonesia",
+            "quotation_date": "2024-01-20",
+            "valid_until": "2024-02-20",
+            "status": "Sent",
+            "total_amount": 45000000,
+            "items": [
+                {"product_id": "PRD-001", "product_name": "Laptop Gaming", "quantity": 2, "unit_price": 15000000, "total": 30000000},
+                {"product_id": "PRD-002", "product_name": "Mouse Wireless", "quantity": 5, "unit_price": 250000, "total": 1250000}
+            ],
+            "created_by": "John Sales",
+            "notes": "Valid for 30 days",
+            "created_at": "2024-01-20 10:30:00",
+            "sent_date": "2024-01-20 14:00:00"
+        },
+        {
+            "id": "QUO-002",
+            "quotation_number": "QUO-2024-002",
+            "customer_id": "CUST-002",
+            "customer_name": "CV. XYZ Trading",
+            "quotation_date": "2024-01-19",
+            "valid_until": "2024-02-19",
+            "status": "Accepted",
+            "total_amount": 28000000,
+            "items": [
+                {"product_id": "PRD-003", "product_name": "Keyboard Mechanical", "quantity": 10, "unit_price": 1200000, "total": 12000000},
+                {"product_id": "PRD-004", "product_name": "Monitor 27\"", "quantity": 8, "unit_price": 2000000, "total": 16000000}
+            ],
+            "created_by": "Jane Sales",
+            "notes": "Accepted by customer",
+            "created_at": "2024-01-19 14:15:00",
+            "sent_date": "2024-01-19 16:30:00",
+            "accepted_date": "2024-01-21 09:15:00"
+        }
+    ]
+    return quotations
+
+@api_router.post("/quotations", response_model=Quotation)
+async def create_quotation(quotation: QuotationCreate):
+    """Create a new quotation"""
+    new_quotation = Quotation(
+        id=f"QUO-{str(uuid.uuid4())[:8].upper()}",
+        quotation_number=f"QUO-2024-{str(uuid.uuid4())[:8].upper()}",
+        customer_id=quotation.customer_id,
+        customer_name=quotation.customer_name,
+        quotation_date=quotation.quotation_date,
+        valid_until=quotation.valid_until,
+        status="Draft",
+        total_amount=sum(item.get('total', 0) for item in quotation.items),
+        items=quotation.items,
+        created_by="Current User",
+        notes=quotation.notes,
+        created_at=datetime.utcnow().isoformat()
+    )
+    # In production, save to database
+    return new_quotation
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

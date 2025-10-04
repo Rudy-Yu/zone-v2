@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Search, Filter, Eye, Edit, Trash2, Download } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -15,45 +15,59 @@ import {
 
 const SalesInvoice = () => {
   const [searchTerm, setSearchTerm] = useState('');
-  
-  const invoices = [
-    {
-      id: 'INV-001',
-      customer: 'PT. ABC Indonesia',
-      date: '2024-01-20',
-      dueDate: '2024-02-19',
-      amount: 'Rp 15.000.000',
-      status: 'Paid',
-      items: 3
-    },
-    {
-      id: 'INV-002',
-      customer: 'CV. XYZ Trading',
-      date: '2024-01-19',
-      dueDate: '2024-02-18',
-      amount: 'Rp 8.500.000',
-      status: 'Pending',
-      items: 2
-    },
-    {
-      id: 'INV-003',
-      customer: 'PT. DEF Corp',
-      date: '2024-01-18',
-      dueDate: '2024-02-17',
-      amount: 'Rp 22.100.000',
-      status: 'Overdue',
-      items: 5
-    },
-    {
-      id: 'INV-004',
-      customer: 'Toko Maju Jaya',
-      date: '2024-01-17',
-      dueDate: '2024-02-16',
-      amount: 'Rp 5.750.000',
-      status: 'Draft',
-      items: 1
+  const [invoices, setInvoices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // API configuration
+  const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+  const API_URL = `${BACKEND_URL}/api`;
+
+  // Fetch invoices from API
+  useEffect(() => {
+    fetchInvoices();
+  }, []);
+
+  const fetchInvoices = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_URL}/sales-invoices`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      setInvoices(data);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching invoices:', err);
+      setError(err.message);
+      // Fallback to mock data if API fails
+      setInvoices([
+        {
+          id: 'INV-001',
+          customer_name: 'PT. ABC Indonesia',
+          invoice_date: '2024-01-20',
+          due_date: '2024-02-19',
+          amount: 15000000,
+          status: 'Paid',
+          items: 3
+        },
+        {
+          id: 'INV-002',
+          customer_name: 'CV. XYZ Trading',
+          invoice_date: '2024-01-19',
+          due_date: '2024-02-18',
+          amount: 8500000,
+          status: 'Pending',
+          items: 2
+        }
+      ]);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -67,8 +81,21 @@ const SalesInvoice = () => {
 
   const filteredInvoices = invoices.filter(invoice =>
     invoice.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    invoice.customer.toLowerCase().includes(searchTerm.toLowerCase())
+    invoice.customer_name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (loading) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Memuat data invoice...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -76,7 +103,14 @@ const SalesInvoice = () => {
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 mb-2">Invoice Penjualan</h1>
-          <p className="text-gray-600">Kelola semua invoice penjualan Anda</p>
+          <p className="text-gray-600">
+            Kelola semua invoice penjualan Anda
+            {error && (
+              <span className="ml-2 text-orange-600 text-sm">
+                (Menggunakan data offline)
+              </span>
+            )}
+          </p>
         </div>
         <Button className="bg-red-500 hover:bg-red-600 text-white">
           <Plus className="h-4 w-4 mr-2" />
@@ -161,10 +195,10 @@ const SalesInvoice = () => {
               {filteredInvoices.map((invoice) => (
                 <TableRow key={invoice.id} className="hover:bg-gray-50">
                   <TableCell className="font-medium">{invoice.id}</TableCell>
-                  <TableCell>{invoice.customer}</TableCell>
-                  <TableCell>{invoice.date}</TableCell>
-                  <TableCell>{invoice.dueDate}</TableCell>
-                  <TableCell className="font-semibold">{invoice.amount}</TableCell>
+                  <TableCell>{invoice.customer_name}</TableCell>
+                  <TableCell>{invoice.invoice_date}</TableCell>
+                  <TableCell>{invoice.due_date}</TableCell>
+                  <TableCell className="font-semibold">Rp {invoice.amount.toLocaleString()}</TableCell>
                   <TableCell>
                     <Badge className={getStatusColor(invoice.status)}>
                       {invoice.status}
