@@ -88,7 +88,7 @@ function App() {
   const renderActiveComponent = () => {
     switch (activeModule) {
       case 'dashboard':
-        return <Dashboard />;
+        return <Dashboard setActiveModule={setActiveModule} />;
       
       // Sales Modules
       case 'sales-invoice':

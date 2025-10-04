@@ -8,7 +8,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Any, Dict
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 ROOT_DIR = Path(__file__).parent
@@ -35,6 +35,35 @@ class StatusCheck(BaseModel):
 class StatusCheckCreate(BaseModel):
     client_name: str
 
+# Dashboard Models
+class DashboardStats(BaseModel):
+    total_revenue: float
+    total_expense: float
+    pending_invoices: int
+    total_products: int
+    revenue_change: float
+    expense_change: float
+    invoice_change: int
+    product_change: int
+
+class Transaction(BaseModel):
+    id: str
+    type: str  # "Invoice", "Purchase", "Payment"
+    customer: str
+    amount: str
+    status: str  # "Paid", "Pending", "Overdue"
+    date: str
+
+class ChartDataPoint(BaseModel):
+    month: str
+    revenue: float
+    expense: float
+
+class DashboardData(BaseModel):
+    stats: DashboardStats
+    recent_transactions: List[Transaction]
+    cash_flow_data: List[ChartDataPoint]
+
 # Add your routes to the router instead of directly to app
 @api_router.get("/")
 async def root():
@@ -51,6 +80,76 @@ async def create_status_check(input: StatusCheckCreate):
 async def get_status_checks():
     status_checks = await db.status_checks.find().to_list(1000)
     return [StatusCheck(**status_check) for status_check in status_checks]
+
+# Dashboard Endpoints
+@api_router.get("/dashboard", response_model=DashboardData)
+async def get_dashboard_data():
+    """Get dashboard statistics and recent transactions"""
+    
+    # Mock data for now - in production, this would come from actual database queries
+    # Calculate stats based on invoices, purchases, products, etc.
+    
+    stats = DashboardStats(
+        total_revenue=194258000.0,
+        total_expense=82450000.0,
+        pending_invoices=23,
+        total_products=1234,
+        revenue_change=12.5,  # percentage
+        expense_change=-3.2,  # percentage
+        invoice_change=5,     # count change
+        product_change=-12    # count change
+    )
+    
+    recent_transactions = [
+        Transaction(
+            id="INV-001",
+            type="Invoice",
+            customer="PT. ABC Indonesia",
+            amount="Rp 15.000.000",
+            status="Paid",
+            date="2024-01-20"
+        ),
+        Transaction(
+            id="INV-002",
+            type="Invoice",
+            customer="CV. XYZ Trading",
+            amount="Rp 8.500.000",
+            status="Pending",
+            date="2024-01-19"
+        ),
+        Transaction(
+            id="PO-003",
+            type="Purchase",
+            customer="Supplier Materials",
+            amount="Rp 12.300.000",
+            status="Paid",
+            date="2024-01-18"
+        ),
+        Transaction(
+            id="INV-004",
+            type="Invoice",
+            customer="PT. DEF Corp",
+            amount="Rp 22.100.000",
+            status="Overdue",
+            date="2024-01-15"
+        )
+    ]
+    
+    # Cash flow chart data for last 6 months
+    cash_flow_data = [
+        ChartDataPoint(month="Agustus", revenue=150000000, expense=80000000),
+        ChartDataPoint(month="September", revenue=180000000, expense=90000000),
+        ChartDataPoint(month="Oktober", revenue=165000000, expense=75000000),
+        ChartDataPoint(month="November", revenue=200000000, expense=95000000),
+        ChartDataPoint(month="Desember", revenue=220000000, expense=100000000),
+        ChartDataPoint(month="Januari", revenue=194258000, expense=82450000)
+    ]
+    
+    return DashboardData(
+        stats=stats,
+        recent_transactions=recent_transactions,
+        cash_flow_data=cash_flow_data
+    )
 
 # Include the router in the main app
 app.include_router(api_router)
