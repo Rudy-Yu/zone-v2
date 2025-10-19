@@ -937,6 +937,96 @@ async def create_quotation(quotation: QuotationCreate):
     # In production, save to database
     return new_quotation
 
+# PDF Generation Endpoints
+pdf_generator = PDFGenerator()
+
+@api_router.get("/sales-invoices/{invoice_id}/pdf")
+async def generate_invoice_pdf(invoice_id: str):
+    """Generate PDF for sales invoice"""
+    try:
+        # Get invoice data (mock for now)
+        invoice_data = {
+            "id": invoice_id,
+            "customer_id": "CUST-001",
+            "customer_name": "PT. ABC Indonesia",
+            "invoice_date": "2024-01-20",
+            "due_date": "2024-02-19",
+            "amount": 15000000,
+            "status": "Paid",
+            "items": [
+                {"product_id": "PRD-001", "product_name": "Laptop Gaming", "quantity": 1, "unit_price": 15000000, "total": 15000000}
+            ]
+        }
+        
+        # Create temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+            pdf_path = pdf_generator.generate_invoice_pdf(invoice_data, tmp_file.name)
+            
+            # Return file path for download
+            return {"pdf_path": pdf_path, "filename": f"invoice_{invoice_id}.pdf"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating PDF: {str(e)}")
+
+@api_router.get("/sales-orders/{order_id}/pdf")
+async def generate_order_pdf(order_id: str):
+    """Generate PDF for sales order"""
+    try:
+        # Get order data (mock for now)
+        order_data = {
+            "id": order_id,
+            "order_number": "SO-2024-001",
+            "customer_id": "CUST-001",
+            "customer_name": "PT. ABC Indonesia",
+            "order_date": "2024-01-20",
+            "delivery_date": "2024-01-25",
+            "status": "Confirmed",
+            "total_amount": 45000000,
+            "items": [
+                {"product_id": "PRD-001", "product_name": "Laptop Gaming", "quantity": 2, "unit_price": 15000000, "total": 30000000},
+                {"product_id": "PRD-002", "product_name": "Mouse Wireless", "quantity": 5, "unit_price": 250000, "total": 1250000}
+            ],
+            "notes": "Priority delivery required"
+        }
+        
+        # Create temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+            pdf_path = pdf_generator.generate_order_pdf(order_data, tmp_file.name)
+            
+            # Return file path for download
+            return {"pdf_path": pdf_path, "filename": f"order_{order_id}.pdf"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating PDF: {str(e)}")
+
+@api_router.get("/quotations/{quotation_id}/pdf")
+async def generate_quotation_pdf(quotation_id: str):
+    """Generate PDF for quotation"""
+    try:
+        # Get quotation data (mock for now)
+        quotation_data = {
+            "id": quotation_id,
+            "quotation_number": "QUO-2024-001",
+            "customer_id": "CUST-001",
+            "customer_name": "PT. ABC Indonesia",
+            "quotation_date": "2024-01-20",
+            "valid_until": "2024-02-20",
+            "status": "Sent",
+            "total_amount": 45000000,
+            "items": [
+                {"product_id": "PRD-001", "product_name": "Laptop Gaming", "quantity": 2, "unit_price": 15000000, "total": 30000000},
+                {"product_id": "PRD-002", "product_name": "Mouse Wireless", "quantity": 5, "unit_price": 250000, "total": 1250000}
+            ],
+            "notes": "Valid for 30 days"
+        }
+        
+        # Create temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+            pdf_path = pdf_generator.generate_quotation_pdf(quotation_data, tmp_file.name)
+            
+            # Return file path for download
+            return {"pdf_path": pdf_path, "filename": f"quotation_{quotation_id}.pdf"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating PDF: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

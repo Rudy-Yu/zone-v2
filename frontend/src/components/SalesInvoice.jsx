@@ -69,6 +69,29 @@ const SalesInvoice = () => {
     }
   };
 
+  const downloadPDF = async (invoiceId) => {
+    try {
+      const response = await fetch(`${API_URL}/sales-invoices/${invoiceId}/pdf`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // Create download link
+      const link = document.createElement('a');
+      link.href = data.pdf_path;
+      link.download = data.filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Error downloading PDF:', err);
+      alert(`Error downloading PDF: ${err.message}`);
+    }
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'Paid': return 'bg-green-100 text-green-800';
@@ -212,7 +235,13 @@ const SalesInvoice = () => {
                       <Button variant="ghost" size="sm">
                         <Edit className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="sm">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => downloadPDF(invoice.id)}
+                        className="text-blue-600 hover:text-blue-700"
+                        title="Download PDF"
+                      >
                         <Download className="h-4 w-4" />
                       </Button>
                       <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700">
