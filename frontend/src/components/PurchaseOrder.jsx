@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Plus, Search, Edit, Trash2, Eye, ShoppingBag, Building, Calendar, DollarSign, Package } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Search, Edit, Trash2, Eye, ShoppingBag, Building, Calendar, DollarSign, Package, Download } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -28,88 +28,70 @@ const PurchaseOrder = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState(null);
-  
-  const [purchaseOrders, setPurchaseOrders] = useState([
-    {
-      id: 'PO-001',
-      orderNumber: 'PO-2024-001',
-      vendorId: 'VEN-001',
-      vendorName: 'PT. Supplier ABC',
-      orderDate: '2024-01-20',
-      expectedDelivery: '2024-01-25',
-      status: 'Ordered',
-      totalAmount: 75000000,
-      items: [
-        { productId: 'PRD-001', productName: 'Laptop Gaming', quantity: 5, unitPrice: 15000000, total: 75000000 }
-      ],
-      createdBy: 'John Purchasing',
-      notes: 'Priority order',
-      createdAt: '2024-01-20 10:30:00',
-      orderedDate: '2024-01-20 14:00:00'
-    },
-    {
-      id: 'PO-002',
-      orderNumber: 'PO-2024-002',
-      vendorId: 'VEN-002',
-      vendorName: 'CV. Distributor XYZ',
-      orderDate: '2024-01-19',
-      expectedDelivery: '2024-01-24',
-      status: 'Shipped',
-      totalAmount: 48000000,
-      items: [
-        { productId: 'PRD-003', productName: 'Keyboard Mechanical', quantity: 20, unitPrice: 1200000, total: 24000000 },
-        { productId: 'PRD-004', productName: 'Monitor 27"', quantity: 12, unitPrice: 2000000, total: 24000000 }
-      ],
-      createdBy: 'Jane Purchasing',
-      notes: 'Standard delivery',
-      createdAt: '2024-01-19 14:15:00',
-      orderedDate: '2024-01-19 16:30:00',
-      shippedDate: '2024-01-22 09:15:00'
-    },
-    {
-      id: 'PO-003',
-      orderNumber: 'PO-2024-003',
-      vendorId: 'VEN-003',
-      vendorName: 'PT. Trading DEF',
-      orderDate: '2024-01-18',
-      expectedDelivery: '2024-01-23',
-      status: 'Delivered',
-      totalAmount: 30000000,
-      items: [
-        { productId: 'PRD-002', productName: 'Mouse Wireless', quantity: 50, unitPrice: 250000, total: 12500000 },
-        { productId: 'PRD-005', productName: 'Headset Gaming', quantity: 25, unitPrice: 700000, total: 17500000 }
-      ],
-      createdBy: 'Bob Purchasing',
-      notes: 'Delivered successfully',
-      createdAt: '2024-01-18 09:45:00',
-      orderedDate: '2024-01-18 11:20:00',
-      deliveredDate: '2024-01-23 14:30:00'
-    },
-    {
-      id: 'PO-004',
-      orderNumber: 'PO-2024-004',
-      vendorId: 'VEN-004',
-      vendorName: 'PT. Logistics GHI',
-      orderDate: '2024-01-17',
-      expectedDelivery: '2024-01-22',
-      status: 'Cancelled',
-      totalAmount: 20000000,
-      items: [
-        { productId: 'PRD-006', productName: 'Webcam HD', quantity: 10, unitPrice: 2000000, total: 20000000 }
-      ],
-      createdBy: 'Alice Purchasing',
-      notes: 'Vendor unable to fulfill',
-      createdAt: '2024-01-17 16:20:00',
-      cancelledDate: '2024-01-21 10:00:00'
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [vendors, setVendors] = useState([]);
+
+  const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+  const API_URL = `${BACKEND_URL}/api`;
+
+  const [purchaseOrders, setPurchaseOrders] = useState([]);
+
+  useEffect(() => {
+    fetchPurchaseOrders();
+    fetchVendors();
+  }, []);
+
+  const fetchPurchaseOrders = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_URL}/purchase-orders`);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      setPurchaseOrders(data);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching purchase orders:', err);
+      setError(err.message);
+      setPurchaseOrders([
+        {
+          id: 'PO-001',
+          order_number: 'PO-2024-001',
+          vendor_id: 'VEN-001',
+          vendor_name: 'PT. Supplier ABC',
+          order_date: '2024-01-20',
+          expected_delivery: '2024-01-25',
+          status: 'Ordered',
+          total_amount: 75000000,
+          created_by: 'John Purchasing',
+          notes: 'Priority order',
+          created_at: '2024-01-20 10:30:00'
+        }
+      ]);
+    } finally {
+      setLoading(false);
     }
-  ]);
+  };
+
+  const fetchVendors = async () => {
+    try {
+      const response = await fetch(`${API_URL}/vendors`);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      setVendors(data);
+    } catch (err) {
+      console.error('Error fetching vendors:', err);
+      setVendors([
+        { id: 'VEN-001', name: 'PT. Supplier ABC' },
+        { id: 'VEN-002', name: 'CV. Distributor XYZ' }
+      ]);
+    }
+  };
 
   const [newOrder, setNewOrder] = useState({
-    vendorId: '',
-    vendorName: '',
-    orderDate: new Date().toISOString().split('T')[0],
-    expectedDelivery: '',
-    items: [],
+    vendor_id: '',
+    order_date: new Date().toISOString().split('T')[0],
+    expected_delivery: '',
     notes: ''
   });
 
@@ -126,72 +108,96 @@ const PurchaseOrder = () => {
   };
 
   const filteredOrders = purchaseOrders.filter(order =>
-    order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    order.vendorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    order.status.toLowerCase().includes(searchTerm.toLowerCase())
+    (order.order_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (order.vendor_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (order.status || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleAddOrder = () => {
-    const order = {
-      id: `PO-${String(purchaseOrders.length + 1).padStart(3, '0')}`,
-      orderNumber: `PO-2024-${String(purchaseOrders.length + 1).padStart(3, '0')}`,
-      ...newOrder,
-      status: 'Draft',
-      totalAmount: newOrder.items.reduce((sum, item) => sum + item.total, 0),
-      createdBy: 'Current User',
-      createdAt: new Date().toISOString()
-    };
-    
-    setPurchaseOrders([...purchaseOrders, order]);
-    setNewOrder({
-      vendorId: '',
-      vendorName: '',
-      orderDate: new Date().toISOString().split('T')[0],
-      expectedDelivery: '',
-      items: [],
-      notes: ''
-    });
-    setIsAddDialogOpen(false);
+  const handleAddOrder = async () => {
+    try {
+      const response = await fetch(`${API_URL}/purchase-orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newOrder)
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const created = await response.json();
+      setPurchaseOrders(prev => [...prev, created]);
+      setNewOrder({
+        vendor_id: '',
+        order_date: new Date().toISOString().split('T')[0],
+        expected_delivery: '',
+        notes: ''
+      });
+      setIsAddDialogOpen(false);
+    } catch (err) {
+      console.error('Error creating purchase order:', err);
+      alert(`Error: ${err.message}`);
+    }
   };
 
   const handleEditOrder = (order) => {
     setEditingOrder(order);
-    setNewOrder(order);
+    setNewOrder({
+      vendor_id: order.vendor_id,
+      order_date: order.order_date,
+      expected_delivery: order.expected_delivery,
+      notes: order.notes
+    });
     setIsAddDialogOpen(true);
   };
 
-  const handleUpdateOrder = () => {
-    setPurchaseOrders(purchaseOrders.map(order => 
-      order.id === editingOrder.id ? { ...order, ...newOrder, totalAmount: newOrder.items.reduce((sum, item) => sum + item.total, 0) } : order
-    ));
-    setEditingOrder(null);
-    setIsAddDialogOpen(false);
-  };
-
-  const handleDeleteOrder = (orderId) => {
-    if (confirm('Apakah Anda yakin ingin menghapus purchase order ini?')) {
-      setPurchaseOrders(purchaseOrders.filter(order => order.id !== orderId));
+  const handleUpdateOrder = async () => {
+    if (!editingOrder) return;
+    try {
+      const response = await fetch(`${API_URL}/purchase-orders/${editingOrder.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newOrder)
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const updated = await response.json();
+      setPurchaseOrders(prev => prev.map(o => o.id === editingOrder.id ? updated : o));
+      setEditingOrder(null);
+      setNewOrder({
+        vendor_id: '',
+        order_date: new Date().toISOString().split('T')[0],
+        expected_delivery: '',
+        notes: ''
+      });
+      setIsAddDialogOpen(false);
+    } catch (err) {
+      console.error('Error updating purchase order:', err);
+      alert(`Error: ${err.message}`);
     }
   };
 
-  const updateOrderStatus = (orderId, newStatus) => {
-    const updatedOrders = purchaseOrders.map(order => {
-      if (order.id === orderId) {
-        const updated = { ...order, status: newStatus };
-        if (newStatus === 'Ordered') {
-          updated.orderedDate = new Date().toISOString();
-        } else if (newStatus === 'Shipped') {
-          updated.shippedDate = new Date().toISOString();
-        } else if (newStatus === 'Delivered') {
-          updated.deliveredDate = new Date().toISOString();
-        } else if (newStatus === 'Cancelled') {
-          updated.cancelledDate = new Date().toISOString();
-        }
-        return updated;
-      }
-      return order;
-    });
-    setPurchaseOrders(updatedOrders);
+  const handleDeleteOrder = async (orderId) => {
+    if (!confirm('Apakah Anda yakin ingin menghapus purchase order ini?')) return;
+    try {
+      const response = await fetch(`${API_URL}/purchase-orders/${orderId}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      setPurchaseOrders(prev => prev.filter(o => o.id !== orderId));
+    } catch (err) {
+      console.error('Error deleting purchase order:', err);
+      alert(`Error: ${err.message}`);
+    }
+  };
+
+  const updateOrderStatus = async (orderId, newStatus) => {
+    try {
+      const response = await fetch(`${API_URL}/purchase-orders/${orderId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const updated = await response.json();
+      setPurchaseOrders(prev => prev.map(o => o.id === orderId ? updated : o));
+    } catch (err) {
+      console.error('Error updating order status:', err);
+      alert(`Error: ${err.message}`);
+    }
   };
 
   const orderOrder = (orderId) => {
@@ -206,13 +212,50 @@ const PurchaseOrder = () => {
     updateOrderStatus(orderId, 'Delivered');
   };
 
+  const downloadPDF = async (orderId) => {
+    try {
+      const response = await fetch(`${API_URL}/purchase-orders/${orderId}/pdf`);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `purchase-order-${orderId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error('Error downloading PDF:', err);
+      alert(`Error: ${err.message}`);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Memuat data purchase order...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 mb-2">Purchase Order Management</h1>
-          <p className="text-gray-600">Kelola purchase order dan tracking status pembelian</p>
+          <p className="text-gray-600">
+            Kelola purchase order dan tracking status pembelian
+            {error && (
+              <span className="ml-2 text-orange-600 text-sm">(Menggunakan data offline)</span>
+            )}
+          </p>
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
@@ -232,30 +275,35 @@ const PurchaseOrder = () => {
             </DialogHeader>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="vendorName">Vendor *</Label>
+                <Label htmlFor="vendor_id">Vendor *</Label>
+                <select
+                  id="vendor_id"
+                  value={newOrder.vendor_id}
+                  onChange={(e) => setNewOrder({...newOrder, vendor_id: e.target.value})}
+                  className="w-full p-2 border rounded-md"
+                >
+                  <option value="">Pilih Vendor</option>
+                  {vendors.map(vendor => (
+                    <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="order_date">Tanggal Order *</Label>
                 <Input
-                  id="vendorName"
-                  value={newOrder.vendorName}
-                  onChange={(e) => setNewOrder({...newOrder, vendorName: e.target.value})}
-                  placeholder="Nama vendor"
+                  id="order_date"
+                  type="date"
+                  value={newOrder.order_date}
+                  onChange={(e) => setNewOrder({...newOrder, order_date: e.target.value})}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="orderDate">Tanggal Order *</Label>
+                <Label htmlFor="expected_delivery">Expected Delivery *</Label>
                 <Input
-                  id="orderDate"
+                  id="expected_delivery"
                   type="date"
-                  value={newOrder.orderDate}
-                  onChange={(e) => setNewOrder({...newOrder, orderDate: e.target.value})}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="expectedDelivery">Expected Delivery *</Label>
-                <Input
-                  id="expectedDelivery"
-                  type="date"
-                  value={newOrder.expectedDelivery}
-                  onChange={(e) => setNewOrder({...newOrder, expectedDelivery: e.target.value})}
+                  value={newOrder.expected_delivery}
+                  onChange={(e) => setNewOrder({...newOrder, expected_delivery: e.target.value})}
                 />
               </div>
               <div className="space-y-2">
@@ -274,23 +322,9 @@ const PurchaseOrder = () => {
               <Label>Item Order</Label>
               <div className="border rounded-lg p-4 mt-2">
                 <div className="text-sm text-gray-600 mb-4">Items akan ditambahkan melalui form terpisah</div>
-                {newOrder.items.length > 0 ? (
-                  <div className="space-y-2">
-                    {newOrder.items.map((item, index) => (
-                      <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                        <span>{item.productName} x {item.quantity}</span>
-                        <span>Rp {item.total.toLocaleString()}</span>
-                      </div>
-                    ))}
-                    <div className="font-bold text-right">
-                      Total: Rp {newOrder.items.reduce((sum, item) => sum + item.total, 0).toLocaleString()}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-4 text-gray-500">
-                    Belum ada item dalam order ini
-                  </div>
-                )}
+                <div className="text-center py-4 text-gray-500">
+                  Belum ada item dalam order ini
+                </div>
               </div>
             </div>
             
@@ -363,7 +397,7 @@ const PurchaseOrder = () => {
               <div>
                 <div className="text-sm text-gray-600">Total Value</div>
                 <div className="text-2xl font-bold text-green-600">
-                  Rp {purchaseOrders.reduce((sum, o) => sum + o.totalAmount, 0).toLocaleString()}
+                  Rp {purchaseOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0).toLocaleString()}
                 </div>
               </div>
             </div>
@@ -408,17 +442,17 @@ const PurchaseOrder = () => {
             <TableBody>
               {filteredOrders.map((order) => (
                 <TableRow key={order.id} className="hover:bg-gray-50">
-                  <TableCell className="font-medium">{order.orderNumber}</TableCell>
+                  <TableCell className="font-medium">{order.order_number}</TableCell>
                   <TableCell>
                     <div>
-                      <div className="font-medium">{order.vendorName}</div>
-                      <div className="text-sm text-gray-500">{order.vendorId}</div>
+                      <div className="font-medium">{order.vendor_name}</div>
+                      <div className="text-sm text-gray-500">{order.vendor_id}</div>
                     </div>
                   </TableCell>
-                  <TableCell>{order.orderDate}</TableCell>
+                  <TableCell>{order.order_date}</TableCell>
                   <TableCell>
-                    <div className={new Date(order.expectedDelivery) < new Date() && order.status !== 'Delivered' && order.status !== 'Cancelled' ? 'text-red-600 font-medium' : ''}>
-                      {order.expectedDelivery}
+                    <div className={new Date(order.expected_delivery) < new Date() && order.status !== 'Delivered' && order.status !== 'Cancelled' ? 'text-red-600 font-medium' : ''}>
+                      {order.expected_delivery}
                     </div>
                   </TableCell>
                   <TableCell>
@@ -455,12 +489,12 @@ const PurchaseOrder = () => {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="font-semibold">Rp {order.totalAmount.toLocaleString()}</TableCell>
-                  <TableCell>{order.createdBy}</TableCell>
+                  <TableCell className="font-semibold">Rp {(order.total_amount || 0).toLocaleString()}</TableCell>
+                  <TableCell>{order.created_by}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
-                      <Button variant="ghost" size="sm">
-                        <Eye className="h-4 w-4" />
+                      <Button variant="ghost" size="sm" onClick={() => downloadPDF(order.id)}>
+                        <Download className="h-4 w-4" />
                       </Button>
                       <Button variant="ghost" size="sm" onClick={() => handleEditOrder(order)}>
                         <Edit className="h-4 w-4" />

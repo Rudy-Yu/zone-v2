@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Search, FileText, Edit, Trash2, Eye, Download, Filter } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -29,92 +29,149 @@ const PurchaseInvoice = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState(null);
-  
-  const [purchaseInvoices, setPurchaseInvoices] = useState([
-    {
-      id: 'PI-001',
-      invoiceNumber: 'INV-2024-001',
-      vendor: 'PT. Supplier ABC',
-      invoiceDate: '2024-01-15',
-      dueDate: '2024-02-15',
-      amount: 25000000,
-      paidAmount: 0,
-      status: 'Pending',
-      description: 'Purchase of raw materials'
-    },
-    {
-      id: 'PI-002',
-      invoiceNumber: 'INV-2024-002',
-      vendor: 'CV. Distributor XYZ',
-      invoiceDate: '2024-01-16',
-      dueDate: '2024-02-16',
-      amount: 15000000,
-      paidAmount: 15000000,
-      status: 'Paid',
-      description: 'Office supplies'
-    },
-    {
-      id: 'PI-003',
-      invoiceNumber: 'INV-2024-003',
-      vendor: 'Toko Elektronik Maju',
-      invoiceDate: '2024-01-17',
-      dueDate: '2024-02-17',
-      amount: 35000000,
-      paidAmount: 17500000,
-      status: 'Partial',
-      description: 'IT Equipment'
-    }
-  ]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // API configuration
+  const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+  const API_URL = `${BACKEND_URL}/api`;
+
+  const [purchaseInvoices, setPurchaseInvoices] = useState([]);
 
   const [newInvoice, setNewInvoice] = useState({
-    invoiceNumber: '',
-    vendor: '',
-    invoiceDate: '',
-    dueDate: '',
+    invoice_number: '',
+    vendor_id: '',
+    vendor_name: '',
+    invoice_date: '',
+    due_date: '',
     amount: '',
-    paidAmount: '',
+    paid_amount: '',
     description: '',
     status: 'Pending'
   });
 
-  const vendors = [
-    'PT. Supplier ABC',
-    'CV. Distributor XYZ',
-    'Toko Elektronik Maju',
-    'PT. Bahan Baku Indonesia',
-    'CV. Peralatan Kantor'
-  ];
+  const [vendors, setVendors] = useState([]);
 
-  const handleAddInvoice = () => {
-    const invoice = {
-      id: `PI-${String(purchaseInvoices.length + 1).padStart(3, '0')}`,
-      ...newInvoice,
-      amount: parseInt(newInvoice.amount),
-      paidAmount: parseInt(newInvoice.paidAmount) || 0
-    };
-    
-    setPurchaseInvoices([...purchaseInvoices, invoice]);
-    setNewInvoice({
-      invoiceNumber: '',
-      vendor: '',
-      invoiceDate: '',
-      dueDate: '',
-      amount: '',
-      paidAmount: '',
-      description: '',
-      status: 'Pending'
-    });
-    setIsAddDialogOpen(false);
+  // Fetch vendors and purchase invoices
+  useEffect(() => {
+    fetchVendors();
+    fetchPurchaseInvoices();
+  }, []);
+
+  const fetchVendors = async () => {
+    try {
+      const response = await fetch(`${API_URL}/vendors`);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      setVendors(data);
+    } catch (err) {
+      console.error('Error fetching vendors:', err);
+      // Fallback vendors
+      setVendors([
+        { id: 'VEND-001', name: 'PT. Supplier ABC' },
+        { id: 'VEND-002', name: 'CV. Distributor XYZ' },
+      ]);
+    }
+  };
+
+  const fetchPurchaseInvoices = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_URL}/purchase-invoices`);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      setPurchaseInvoices(data);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching purchase invoices:', err);
+      setError(err.message);
+      setPurchaseInvoices([
+        {
+          id: 'PI-001',
+          invoice_number: 'INV-2024-001',
+          vendor_id: 'VEND-001',
+          vendor_name: 'PT. Supplier ABC',
+          invoice_date: '2024-01-15',
+          due_date: '2024-02-15',
+          amount: 25000000,
+          paid_amount: 0,
+          status: 'Pending',
+          description: 'Purchase of raw materials',
+          created_at: '2024-01-15 10:00:00'
+        }
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddInvoice = async () => {
+    try {
+      const payload = {
+        ...newInvoice,
+        amount: parseFloat(newInvoice.amount || 0),
+        paid_amount: parseFloat(newInvoice.paid_amount || 0)
+      };
+      const response = await fetch(`${API_URL}/purchase-invoices`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const created = await response.json();
+      setPurchaseInvoices(prev => [...prev, created]);
+      setNewInvoice({
+        invoice_number: '', vendor_id: '', vendor_name: '', invoice_date: '', due_date: '', amount: '', paid_amount: '', description: '', status: 'Pending'
+      });
+      setIsAddDialogOpen(false);
+    } catch (err) {
+      console.error('Error creating purchase invoice:', err);
+      alert(`Error: ${err.message}`);
+    }
   };
 
   const handleEditInvoice = (invoice) => {
     setEditingInvoice(invoice);
-    setNewInvoice(invoice);
+    setNewInvoice({
+      invoice_number: invoice.invoice_number,
+      vendor_id: invoice.vendor_id,
+      vendor_name: invoice.vendor_name,
+      invoice_date: invoice.invoice_date,
+      due_date: invoice.due_date,
+      amount: invoice.amount,
+      paid_amount: invoice.paid_amount,
+      description: invoice.description,
+      status: invoice.status
+    });
     setIsAddDialogOpen(true);
   };
 
-  const handleDeleteInvoice = (invoiceId) => {
-    setPurchaseInvoices(purchaseInvoices.filter(p => p.id !== invoiceId));
+  const handleDeleteInvoice = async (invoiceId) => {
+    try {
+      const response = await fetch(`${API_URL}/purchase-invoices/${invoiceId}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      setPurchaseInvoices(prev => prev.filter(p => p.id !== invoiceId));
+    } catch (err) {
+      console.error('Error deleting invoice:', err);
+      alert(`Error: ${err.message}`);
+    }
+  };
+
+  const downloadPDF = async (invoiceId) => {
+    try {
+      const response = await fetch(`${API_URL}/purchase-invoices/${invoiceId}/pdf`);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      const link = document.createElement('a');
+      link.href = data.pdf_path;
+      link.download = data.filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Error downloading PDF:', err);
+      alert(`Error downloading PDF: ${err.message}`);
+    }
   };
 
   const getStatusColor = (status) => {
@@ -128,13 +185,13 @@ const PurchaseInvoice = () => {
   };
 
   const filteredInvoices = purchaseInvoices.filter(invoice =>
-    invoice.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    invoice.vendor.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    invoice.status.toLowerCase().includes(searchTerm.toLowerCase())
+    (invoice.invoice_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (invoice.vendor_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (invoice.status || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const totalAmount = purchaseInvoices.reduce((sum, invoice) => sum + invoice.amount, 0);
-  const paidAmount = purchaseInvoices.reduce((sum, invoice) => sum + invoice.paidAmount, 0);
+  const totalAmount = purchaseInvoices.reduce((sum, invoice) => sum + (invoice.amount || 0), 0);
+  const paidAmount = purchaseInvoices.reduce((sum, invoice) => sum + (invoice.paid_amount || 0), 0);
   const pendingAmount = totalAmount - paidAmount;
 
   return (
@@ -143,7 +200,12 @@ const PurchaseInvoice = () => {
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 mb-2">Purchase Invoice</h1>
-          <p className="text-gray-600">Kelola invoice pembelian dari vendor</p>
+          <p className="text-gray-600">
+            Kelola invoice pembelian dari vendor
+            {error && (
+              <span className="ml-2 text-orange-600 text-sm">(Menggunakan data offline)</span>
+            )}
+          </p>
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
@@ -161,45 +223,48 @@ const PurchaseInvoice = () => {
             </DialogHeader>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="invoiceNumber">Invoice Number</Label>
+                <Label htmlFor="invoice_number">Invoice Number</Label>
                 <Input
-                  id="invoiceNumber"
-                  value={newInvoice.invoiceNumber}
-                  onChange={(e) => setNewInvoice({...newInvoice, invoiceNumber: e.target.value})}
+                  id="invoice_number"
+                  value={newInvoice.invoice_number}
+                  onChange={(e) => setNewInvoice({...newInvoice, invoice_number: e.target.value})}
                   placeholder="Enter invoice number"
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="vendor">Vendor</Label>
-                <Select value={newInvoice.vendor} onValueChange={(value) => setNewInvoice({...newInvoice, vendor: value})}>
+                <Select value={newInvoice.vendor_id} onValueChange={(value) => {
+                  const v = vendors.find(v => v.id === value);
+                  setNewInvoice({...newInvoice, vendor_id: value, vendor_name: v ? v.name : ''});
+                }}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select vendor" />
                   </SelectTrigger>
                   <SelectContent>
                     {vendors.map((vendor) => (
-                      <SelectItem key={vendor} value={vendor}>
-                        {vendor}
+                      <SelectItem key={vendor.id} value={vendor.id}>
+                        {vendor.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="invoiceDate">Invoice Date</Label>
+                <Label htmlFor="invoice_date">Invoice Date</Label>
                 <Input
-                  id="invoiceDate"
+                  id="invoice_date"
                   type="date"
-                  value={newInvoice.invoiceDate}
-                  onChange={(e) => setNewInvoice({...newInvoice, invoiceDate: e.target.value})}
+                  value={newInvoice.invoice_date}
+                  onChange={(e) => setNewInvoice({...newInvoice, invoice_date: e.target.value})}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="dueDate">Due Date</Label>
+                <Label htmlFor="due_date">Due Date</Label>
                 <Input
-                  id="dueDate"
+                  id="due_date"
                   type="date"
-                  value={newInvoice.dueDate}
-                  onChange={(e) => setNewInvoice({...newInvoice, dueDate: e.target.value})}
+                  value={newInvoice.due_date}
+                  onChange={(e) => setNewInvoice({...newInvoice, due_date: e.target.value})}
                 />
               </div>
               <div className="space-y-2">
@@ -213,12 +278,12 @@ const PurchaseInvoice = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="paidAmount">Paid Amount</Label>
+                <Label htmlFor="paid_amount">Paid Amount</Label>
                 <Input
-                  id="paidAmount"
+                  id="paid_amount"
                   type="number"
-                  value={newInvoice.paidAmount}
-                  onChange={(e) => setNewInvoice({...newInvoice, paidAmount: e.target.value})}
+                  value={newInvoice.paid_amount}
+                  onChange={(e) => setNewInvoice({...newInvoice, paid_amount: e.target.value})}
                   placeholder="Enter paid amount"
                 />
               </div>
@@ -325,10 +390,10 @@ const PurchaseInvoice = () => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Invoice Number</TableHead>
-                <TableHead>Vendor</TableHead>
-                <TableHead>Invoice Date</TableHead>
-                <TableHead>Due Date</TableHead>
+                  <TableHead>Invoice Number</TableHead>
+                  <TableHead>Vendor</TableHead>
+                  <TableHead>Invoice Date</TableHead>
+                  <TableHead>Due Date</TableHead>
                 <TableHead>Amount</TableHead>
                 <TableHead>Paid</TableHead>
                 <TableHead>Status</TableHead>
@@ -338,12 +403,12 @@ const PurchaseInvoice = () => {
             <TableBody>
               {filteredInvoices.map((invoice) => (
                 <TableRow key={invoice.id} className="hover:bg-gray-50">
-                  <TableCell className="font-medium">{invoice.invoiceNumber}</TableCell>
-                  <TableCell>{invoice.vendor}</TableCell>
-                  <TableCell>{invoice.invoiceDate}</TableCell>
-                  <TableCell>{invoice.dueDate}</TableCell>
+                  <TableCell className="font-medium">{invoice.invoice_number}</TableCell>
+                  <TableCell>{invoice.vendor_name}</TableCell>
+                  <TableCell>{invoice.invoice_date}</TableCell>
+                  <TableCell>{invoice.due_date}</TableCell>
                   <TableCell>Rp {invoice.amount.toLocaleString('id-ID')}</TableCell>
-                  <TableCell>Rp {invoice.paidAmount.toLocaleString('id-ID')}</TableCell>
+                  <TableCell>Rp {invoice.paid_amount.toLocaleString('id-ID')}</TableCell>
                   <TableCell>
                     <Badge className={getStatusColor(invoice.status)}>
                       {invoice.status}
@@ -368,6 +433,14 @@ const PurchaseInvoice = () => {
                       <Button
                         variant="outline"
                         size="sm"
+                        onClick={() => downloadPDF(invoice.id)}
+                        title="Download PDF"
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
@@ -384,6 +457,8 @@ const PurchaseInvoice = () => {
 };
 
 export default PurchaseInvoice;
+
+
 
 
 

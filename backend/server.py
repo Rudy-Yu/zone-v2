@@ -1027,6 +1027,433 @@ async def generate_quotation_pdf(quotation_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating PDF: {str(e)}")
 
+# =============================
+# Purchase Module Models
+# =============================
+
+class Vendor(BaseModel):
+    id: str
+    name: str
+    contact_person: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    status: str = "Active"
+    created_at: str
+
+
+class VendorCreate(BaseModel):
+    name: str
+    contact_person: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+
+
+class PurchaseInvoice(BaseModel):
+    id: str
+    invoice_number: str
+    vendor_id: str
+    vendor_name: str
+    invoice_date: str
+    due_date: str
+    amount: float
+    paid_amount: float
+    status: str
+    description: Optional[str] = ""
+    created_at: str
+
+
+class PurchaseInvoiceCreate(BaseModel):
+    invoice_number: str
+    vendor_id: str
+    vendor_name: str
+    invoice_date: str
+    due_date: str
+    amount: float
+    paid_amount: float = 0
+    status: str = "Pending"
+    description: Optional[str] = ""
+
+
+class PurchaseOrder(BaseModel):
+    id: str
+    order_number: str
+    vendor_id: str
+    vendor_name: str
+    order_date: str
+    delivery_date: str
+    status: str
+    total_amount: float
+    items: List[Dict]
+    created_by: str
+    notes: Optional[str] = ""
+    created_at: str
+
+
+class PurchaseOrderCreate(BaseModel):
+    vendor_id: str
+    vendor_name: str
+    order_date: str
+    delivery_date: str
+    items: List[Dict]
+    notes: Optional[str] = ""
+
+
+# =============================
+# Product Module Models
+# =============================
+
+class Product(BaseModel):
+    id: str
+    name: str
+    sku: str
+    description: str = ""
+    category: str
+    price: float
+    cost: float
+    stock: int
+    min_stock: int
+    max_stock: int
+    status: str = "Active"
+    created_at: str
+
+
+class ProductCreate(BaseModel):
+    name: str
+    sku: str
+    description: str = ""
+    category: str
+    price: float
+    cost: float
+    stock: int
+    min_stock: int
+    max_stock: int
+
+
+# =============================
+# Purchase Module Endpoints
+# =============================
+
+# Vendor Endpoints
+@api_router.get("/vendors", response_model=List[Vendor])
+async def get_vendors():
+    vendors = [
+        {
+            "id": "VEND-001",
+            "name": "PT. Supplier ABC",
+            "contact_person": "Andi",
+            "email": "sales@supplierabc.co.id",
+            "phone": "+62 21 1111 2222",
+            "address": "Jl. Raya Industri No. 1, Jakarta",
+            "city": "Jakarta",
+            "status": "Active",
+            "created_at": "2024-01-10"
+        },
+        {
+            "id": "VEND-002",
+            "name": "CV. Distributor XYZ",
+            "contact_person": "Budi",
+            "email": "info@xyz.co.id",
+            "phone": "+62 31 2222 3333",
+            "address": "Jl. Pahlawan No. 5, Surabaya",
+            "city": "Surabaya",
+            "status": "Active",
+            "created_at": "2024-01-12"
+        }
+    ]
+    return vendors
+
+
+@api_router.post("/vendors", response_model=Vendor)
+async def create_vendor(vendor: VendorCreate):
+    new_vendor = Vendor(
+        id=f"VEND-{str(uuid.uuid4())[:8].upper()}",
+        name=vendor.name,
+        contact_person=vendor.contact_person,
+        email=vendor.email,
+        phone=vendor.phone,
+        address=vendor.address,
+        city=vendor.city,
+        status="Active",
+        created_at=datetime.utcnow().isoformat(),
+    )
+    return new_vendor
+
+
+@api_router.get("/vendors/{vendor_id}", response_model=Vendor)
+async def get_vendor(vendor_id: str):
+    example = {
+        "id": "VEND-001",
+        "name": "PT. Supplier ABC",
+        "contact_person": "Andi",
+        "email": "sales@supplierabc.co.id",
+        "phone": "+62 21 1111 2222",
+        "address": "Jl. Raya Industri No. 1, Jakarta",
+        "city": "Jakarta",
+        "status": "Active",
+        "created_at": "2024-01-10"
+    }
+    if vendor_id != "VEND-001":
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    return example
+
+
+@api_router.put("/vendors/{vendor_id}", response_model=Vendor)
+async def update_vendor(vendor_id: str, vendor: VendorCreate):
+    updated = Vendor(
+        id=vendor_id,
+        name=vendor.name,
+        contact_person=vendor.contact_person,
+        email=vendor.email,
+        phone=vendor.phone,
+        address=vendor.address,
+        city=vendor.city,
+        status="Active",
+        created_at=datetime.utcnow().isoformat(),
+    )
+    return updated
+
+
+@api_router.delete("/vendors/{vendor_id}")
+async def delete_vendor(vendor_id: str):
+    return {"message": "Vendor deleted"}
+
+
+# Purchase Invoice Endpoints
+@api_router.get("/purchase-invoices", response_model=List[PurchaseInvoice])
+async def get_purchase_invoices():
+    invoices = [
+        {
+            "id": "PI-001",
+            "invoice_number": "INV-2024-001",
+            "vendor_id": "VEND-001",
+            "vendor_name": "PT. Supplier ABC",
+            "invoice_date": "2024-01-15",
+            "due_date": "2024-02-15",
+            "amount": 25000000,
+            "paid_amount": 0,
+            "status": "Pending",
+            "description": "Purchase of raw materials",
+            "created_at": "2024-01-15 10:00:00"
+        },
+        {
+            "id": "PI-002",
+            "invoice_number": "INV-2024-002",
+            "vendor_id": "VEND-002",
+            "vendor_name": "CV. Distributor XYZ",
+            "invoice_date": "2024-01-16",
+            "due_date": "2024-02-16",
+            "amount": 15000000,
+            "paid_amount": 15000000,
+            "status": "Paid",
+            "description": "Office supplies",
+            "created_at": "2024-01-16 11:00:00"
+        }
+    ]
+    return invoices
+
+
+@api_router.post("/purchase-invoices", response_model=PurchaseInvoice)
+async def create_purchase_invoice(pi: PurchaseInvoiceCreate):
+    new_pi = PurchaseInvoice(
+        id=f"PI-{str(uuid.uuid4())[:8].upper()}",
+        invoice_number=pi.invoice_number,
+        vendor_id=pi.vendor_id,
+        vendor_name=pi.vendor_name,
+        invoice_date=pi.invoice_date,
+        due_date=pi.due_date,
+        amount=pi.amount,
+        paid_amount=pi.paid_amount,
+        status=pi.status,
+        description=pi.description,
+        created_at=datetime.utcnow().isoformat(),
+    )
+    return new_pi
+
+
+@api_router.get("/purchase-invoices/{invoice_id}", response_model=PurchaseInvoice)
+async def get_purchase_invoice(invoice_id: str):
+    example = {
+        "id": "PI-001",
+        "invoice_number": "INV-2024-001",
+        "vendor_id": "VEND-001",
+        "vendor_name": "PT. Supplier ABC",
+        "invoice_date": "2024-01-15",
+        "due_date": "2024-02-15",
+        "amount": 25000000,
+        "paid_amount": 0,
+        "status": "Pending",
+        "description": "Purchase of raw materials",
+        "created_at": "2024-01-15 10:00:00"
+    }
+    if invoice_id != "PI-001":
+        raise HTTPException(status_code=404, detail="Purchase invoice not found")
+    return example
+
+
+@api_router.put("/purchase-invoices/{invoice_id}", response_model=PurchaseInvoice)
+async def update_purchase_invoice(invoice_id: str, pi: PurchaseInvoiceCreate):
+    updated = PurchaseInvoice(
+        id=invoice_id,
+        invoice_number=pi.invoice_number,
+        vendor_id=pi.vendor_id,
+        vendor_name=pi.vendor_name,
+        invoice_date=pi.invoice_date,
+        due_date=pi.due_date,
+        amount=pi.amount,
+        paid_amount=pi.paid_amount,
+        status=pi.status,
+        description=pi.description,
+        created_at=datetime.utcnow().isoformat(),
+    )
+    return updated
+
+
+@api_router.delete("/purchase-invoices/{invoice_id}")
+async def delete_purchase_invoice(invoice_id: str):
+    return {"message": "Purchase invoice deleted"}
+
+
+@api_router.get("/purchase-invoices/{invoice_id}/pdf")
+async def generate_purchase_invoice_pdf(invoice_id: str):
+    try:
+        invoice_data = {
+            "id": invoice_id,
+            "customer_id": "VEND-001",  # reuse field in pdf format
+            "customer_name": "PT. Supplier ABC",
+            "invoice_date": "2024-01-15",
+            "due_date": "2024-02-15",
+            "amount": 25000000,
+            "status": "Pending",
+            "items": [
+                {"product_id": "PRD-010", "product_name": "Bahan Baku A", "quantity": 10, "unit_price": 1000000, "total": 10000000}
+            ],
+        }
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+            pdf_path = pdf_generator.generate_invoice_pdf(invoice_data, tmp_file.name)
+            return {"pdf_path": pdf_path, "filename": f"purchase_invoice_{invoice_id}.pdf"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating PDF: {str(e)}")
+
+
+# Purchase Order Endpoints
+@api_router.get("/purchase-orders", response_model=List[PurchaseOrder])
+async def get_purchase_orders():
+    orders = [
+        {
+            "id": "PO-001",
+            "order_number": "PO-2024-001",
+            "vendor_id": "VEND-001",
+            "vendor_name": "PT. Supplier ABC",
+            "order_date": "2024-01-10",
+            "delivery_date": "2024-01-20",
+            "status": "Confirmed",
+            "total_amount": 41000000,
+            "items": [
+                {"product_id": "PRD-010", "product_name": "Bahan Baku A", "quantity": 10, "unit_price": 1000000, "total": 10000000},
+                {"product_id": "PRD-011", "product_name": "Bahan Baku B", "quantity": 7, "unit_price": 3000000, "total": 21000000}
+            ],
+            "created_by": "Procurement",
+            "notes": "Urgent",
+            "created_at": "2024-01-10 09:00:00"
+        }
+    ]
+    return orders
+
+
+@api_router.post("/purchase-orders", response_model=PurchaseOrder)
+async def create_purchase_order(order: PurchaseOrderCreate):
+    new_order = PurchaseOrder(
+        id=f"PO-{str(uuid.uuid4())[:8].upper()}",
+        order_number=f"PO-2024-{str(uuid.uuid4())[:6].upper()}",
+        vendor_id=order.vendor_id,
+        vendor_name=order.vendor_name,
+        order_date=order.order_date,
+        delivery_date=order.delivery_date,
+        status="Draft",
+        total_amount=sum(item.get('total', 0) for item in order.items),
+        items=order.items,
+        created_by="Current User",
+        notes=order.notes,
+        created_at=datetime.utcnow().isoformat(),
+    )
+    return new_order
+
+
+@api_router.get("/purchase-orders/{order_id}", response_model=PurchaseOrder)
+async def get_purchase_order(order_id: str):
+    example = {
+        "id": "PO-001",
+        "order_number": "PO-2024-001",
+        "vendor_id": "VEND-001",
+        "vendor_name": "PT. Supplier ABC",
+        "order_date": "2024-01-10",
+        "delivery_date": "2024-01-20",
+        "status": "Confirmed",
+        "total_amount": 41000000,
+        "items": [
+            {"product_id": "PRD-010", "product_name": "Bahan Baku A", "quantity": 10, "unit_price": 1000000, "total": 10000000},
+            {"product_id": "PRD-011", "product_name": "Bahan Baku B", "quantity": 7, "unit_price": 3000000, "total": 21000000}
+        ],
+        "created_by": "Procurement",
+        "notes": "Urgent",
+        "created_at": "2024-01-10 09:00:00"
+    }
+    if order_id != "PO-001":
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+    return example
+
+
+@api_router.put("/purchase-orders/{order_id}", response_model=PurchaseOrder)
+async def update_purchase_order(order_id: str, order: PurchaseOrderCreate):
+    updated = PurchaseOrder(
+        id=order_id,
+        order_number=f"PO-2024-{order_id}",
+        vendor_id=order.vendor_id,
+        vendor_name=order.vendor_name,
+        order_date=order.order_date,
+        delivery_date=order.delivery_date,
+        status="Draft",
+        total_amount=sum(item.get('total', 0) for item in order.items),
+        items=order.items,
+        created_by="Current User",
+        notes=order.notes,
+        created_at=datetime.utcnow().isoformat(),
+    )
+    return updated
+
+
+@api_router.delete("/purchase-orders/{order_id}")
+async def delete_purchase_order(order_id: str):
+    return {"message": "Purchase order deleted"}
+
+
+@api_router.get("/purchase-orders/{order_id}/pdf")
+async def generate_purchase_order_pdf(order_id: str):
+    try:
+        order_data = {
+            "id": order_id,
+            "order_number": "PO-2024-001",
+            "customer_id": "VEND-001",  # reuse pdf field
+            "customer_name": "PT. Supplier ABC",
+            "order_date": "2024-01-10",
+            "delivery_date": "2024-01-20",
+            "status": "Confirmed",
+            "total_amount": 41000000,
+            "items": [
+                {"product_id": "PRD-010", "product_name": "Bahan Baku A", "quantity": 10, "unit_price": 1000000, "total": 10000000}
+            ],
+            "notes": "Urgent",
+        }
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+            pdf_path = pdf_generator.generate_order_pdf(order_data, tmp_file.name)
+            return {"pdf_path": pdf_path, "filename": f"purchase_order_{order_id}.pdf"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating PDF: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
