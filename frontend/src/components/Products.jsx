@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Search, Package, AlertTriangle, Edit, Trash2, Eye } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -29,48 +29,55 @@ const Products = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
-  const [products, setProducts] = useState([
-    {
-      id: 'PRD-001',
-      name: 'Laptop ASUS ROG',
-      sku: 'ASU-ROG-001',
-      category: 'Elektronik',
-      stock: 25,
-      minStock: 10,
-      price: 'Rp 15.000.000',
-      status: 'Active'
-    },
-    {
-      id: 'PRD-002',
-      name: 'Mouse Logitech MX',
-      sku: 'LOG-MX-002',
-      category: 'Aksesoris',
-      stock: 5,
-      minStock: 10,
-      price: 'Rp 850.000',
-      status: 'Low Stock'
-    },
-    {
-      id: 'PRD-003',
-      name: 'Keyboard Mechanical',
-      sku: 'KEY-MEC-003',
-      category: 'Aksesoris',
-      stock: 0,
-      minStock: 5,
-      price: 'Rp 1.200.000',
-      status: 'Out of Stock'
-    },
-    {
-      id: 'PRD-004',
-      name: 'Monitor Dell 27"',
-      sku: 'DEL-MON-004',
-      category: 'Elektronik',
-      stock: 15,
-      minStock: 8,
-      price: 'Rp 3.500.000',
-      status: 'Active'
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+  const API_URL = `${BACKEND_URL}/api`;
+
+  const [products, setProducts] = useState([]);
+
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  const fetchProducts = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_URL}/products`);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      setProducts(data);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching products:', err);
+      setError(err.message);
+      setProducts([
+        {
+          id: 'PRD-001',
+          name: 'Laptop ASUS ROG',
+          sku: 'ASU-ROG-001',
+          category: 'Elektronik',
+          stock: 25,
+          min_stock: 10,
+          price: 15000000,
+          status: 'Active'
+        },
+        {
+          id: 'PRD-002',
+          name: 'Mouse Logitech MX',
+          sku: 'LOG-MX-002',
+          category: 'Aksesoris',
+          stock: 5,
+          min_stock: 10,
+          price: 850000,
+          status: 'Active'
+        }
+      ]);
+    } finally {
+      setLoading(false);
     }
-  ]);
+  };
 
   const [newProduct, setNewProduct] = useState({
     name: '',
@@ -80,8 +87,8 @@ const Products = () => {
     price: '',
     cost: '',
     stock: '',
-    minStock: '',
-    maxStock: '',
+    min_stock: '',
+    max_stock: '',
     status: 'Active'
   });
 
@@ -98,38 +105,107 @@ const Products = () => {
     'Books'
   ];
 
-  const handleAddProduct = () => {
-    const product = {
-      id: `PRD-${String(products.length + 1).padStart(3, '0')}`,
-      ...newProduct,
-      price: `Rp ${parseInt(newProduct.price).toLocaleString('id-ID')}`,
-      stock: parseInt(newProduct.stock),
-      minStock: parseInt(newProduct.minStock),
-      maxStock: parseInt(newProduct.maxStock)
-    };
-    
-    setProducts([...products, product]);
-    setNewProduct({
-      name: '',
-      sku: '',
-      description: '',
-      category: '',
-      price: '',
-      cost: '',
-      stock: '',
-      minStock: '',
-      maxStock: '',
-      status: 'Active'
-    });
-    setIsAddDialogOpen(false);
+  const handleAddProduct = async () => {
+    try {
+      const response = await fetch(`${API_URL}/products`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...newProduct,
+          price: parseFloat(newProduct.price),
+          cost: parseFloat(newProduct.cost),
+          stock: parseInt(newProduct.stock),
+          min_stock: parseInt(newProduct.min_stock),
+          max_stock: parseInt(newProduct.max_stock)
+        })
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const created = await response.json();
+      setProducts(prev => [...prev, created]);
+      setNewProduct({
+        name: '',
+        sku: '',
+        description: '',
+        category: '',
+        price: '',
+        cost: '',
+        stock: '',
+        min_stock: '',
+        max_stock: '',
+        status: 'Active'
+      });
+      setIsAddDialogOpen(false);
+    } catch (err) {
+      console.error('Error creating product:', err);
+      alert(`Error: ${err.message}`);
+    }
   };
 
   const handleEditProduct = (product) => {
     setEditingProduct(product);
+    setNewProduct({
+      name: product.name,
+      sku: product.sku,
+      description: product.description || '',
+      category: product.category,
+      price: product.price.toString(),
+      cost: product.cost.toString(),
+      stock: product.stock.toString(),
+      min_stock: product.min_stock.toString(),
+      max_stock: product.max_stock.toString(),
+      status: product.status
+    });
+    setIsAddDialogOpen(true);
   };
 
-  const handleDeleteProduct = (productId) => {
-    setProducts(products.filter(p => p.id !== productId));
+  const handleUpdateProduct = async () => {
+    if (!editingProduct) return;
+    try {
+      const response = await fetch(`${API_URL}/products/${editingProduct.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...newProduct,
+          price: parseFloat(newProduct.price),
+          cost: parseFloat(newProduct.cost),
+          stock: parseInt(newProduct.stock),
+          min_stock: parseInt(newProduct.min_stock),
+          max_stock: parseInt(newProduct.max_stock)
+        })
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const updated = await response.json();
+      setProducts(prev => prev.map(p => p.id === editingProduct.id ? updated : p));
+      setEditingProduct(null);
+      setNewProduct({
+        name: '',
+        sku: '',
+        description: '',
+        category: '',
+        price: '',
+        cost: '',
+        stock: '',
+        min_stock: '',
+        max_stock: '',
+        status: 'Active'
+      });
+      setIsAddDialogOpen(false);
+    } catch (err) {
+      console.error('Error updating product:', err);
+      alert(`Error: ${err.message}`);
+    }
+  };
+
+  const handleDeleteProduct = async (productId) => {
+    if (!confirm('Hapus produk ini?')) return;
+    try {
+      const response = await fetch(`${API_URL}/products/${productId}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      setProducts(prev => prev.filter(p => p.id !== productId));
+    } catch (err) {
+      console.error('Error deleting product:', err);
+      alert(`Error: ${err.message}`);
+    }
   };
 
   const getStockStatus = (stock, minStock) => {
@@ -143,13 +219,31 @@ const Products = () => {
     product.sku.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  if (loading) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Memuat data produk...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 mb-2">Produk</h1>
-          <p className="text-gray-600">Kelola inventori dan produk Anda</p>
+          <p className="text-gray-600">
+            Kelola inventori dan produk Anda
+            {error && (
+              <span className="ml-2 text-orange-600 text-sm">(Menggunakan data offline)</span>
+            )}
+          </p>
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
@@ -160,9 +254,9 @@ const Products = () => {
           </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Tambah Produk Baru</DialogTitle>
+              <DialogTitle>{editingProduct ? 'Edit Produk' : 'Tambah Produk Baru'}</DialogTitle>
               <DialogDescription>
-                Isi informasi produk yang akan ditambahkan ke inventori.
+                {editingProduct ? 'Update informasi produk' : 'Isi informasi produk yang akan ditambahkan ke inventori.'}
               </DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-2 gap-4">
@@ -242,22 +336,22 @@ const Products = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="minStock">Stok Minimum</Label>
+                <Label htmlFor="min_stock">Stok Minimum</Label>
                 <Input
-                  id="minStock"
+                  id="min_stock"
                   type="number"
-                  value={newProduct.minStock}
-                  onChange={(e) => setNewProduct({...newProduct, minStock: e.target.value})}
+                  value={newProduct.min_stock}
+                  onChange={(e) => setNewProduct({...newProduct, min_stock: e.target.value})}
                   placeholder="Masukkan stok minimum"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="maxStock">Stok Maksimum</Label>
+                <Label htmlFor="max_stock">Stok Maksimum</Label>
                 <Input
-                  id="maxStock"
+                  id="max_stock"
                   type="number"
-                  value={newProduct.maxStock}
-                  onChange={(e) => setNewProduct({...newProduct, maxStock: e.target.value})}
+                  value={newProduct.max_stock}
+                  onChange={(e) => setNewProduct({...newProduct, max_stock: e.target.value})}
                   placeholder="Masukkan stok maksimum"
                 />
               </div>
@@ -276,8 +370,8 @@ const Products = () => {
               <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                 Batal
               </Button>
-              <Button onClick={handleAddProduct} className="bg-red-500 hover:bg-red-600 text-white">
-                Tambah Produk
+              <Button onClick={editingProduct ? handleUpdateProduct : handleAddProduct} className="bg-red-500 hover:bg-red-600 text-white">
+                {editingProduct ? 'Update Produk' : 'Tambah Produk'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -308,7 +402,7 @@ const Products = () => {
               <div>
                 <div className="text-sm text-gray-600">Stok Tersedia</div>
                 <div className="text-2xl font-bold text-green-600">
-                  {products.filter(p => p.stock > p.minStock).length}
+                  {products.filter(p => p.stock > p.min_stock).length}
                 </div>
               </div>
             </div>
@@ -323,7 +417,7 @@ const Products = () => {
               <div>
                 <div className="text-sm text-gray-600">Stok Menipis</div>
                 <div className="text-2xl font-bold text-yellow-600">
-                  {products.filter(p => p.stock <= p.minStock && p.stock > 0).length}
+                  {products.filter(p => p.stock <= p.min_stock && p.stock > 0).length}
                 </div>
               </div>
             </div>
@@ -382,19 +476,19 @@ const Products = () => {
             </TableHeader>
             <TableBody>
               {filteredProducts.map((product) => {
-                const stockInfo = getStockStatus(product.stock, product.minStock);
+                const stockInfo = getStockStatus(product.stock, product.min_stock);
                 return (
                   <TableRow key={product.id} className="hover:bg-gray-50">
                     <TableCell className="font-medium">{product.name}</TableCell>
                     <TableCell className="text-gray-600">{product.sku}</TableCell>
                     <TableCell>{product.category}</TableCell>
                     <TableCell>
-                      <span className={product.stock <= product.minStock ? 'text-red-600 font-semibold' : 'text-gray-800'}>
+                      <span className={product.stock <= product.min_stock ? 'text-red-600 font-semibold' : 'text-gray-800'}>
                         {product.stock}
                       </span>
                     </TableCell>
-                    <TableCell className="text-gray-600">{product.minStock}</TableCell>
-                    <TableCell className="font-semibold">{product.price}</TableCell>
+                    <TableCell className="text-gray-600">{product.min_stock}</TableCell>
+                    <TableCell className="font-semibold">Rp {product.price.toLocaleString()}</TableCell>
                     <TableCell>
                       <Badge className={stockInfo.color}>
                         {stockInfo.status}
@@ -433,7 +527,7 @@ const Products = () => {
       </Card>
 
       {/* Low Stock Alert */}
-      {products.some(p => p.stock <= p.minStock) && (
+      {products.some(p => p.stock <= p.min_stock) && (
         <Card className="border-yellow-200 bg-yellow-50">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">

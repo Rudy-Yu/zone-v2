@@ -6,98 +6,114 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Label } from './ui/label';
+import { Switch } from './ui/switch';
 
 const Settings = () => {
   const [activeTab, setActiveTab] = useState('general');
-  const API = (process.env.REACT_APP_BACKEND_URL ? `${process.env.REACT_APP_BACKEND_URL}/api` : 'http://localhost:8000/api');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+  const API_URL = `${BACKEND_URL}/api`;
+
   const [settings, setSettings] = useState({
     general: {
-      companyName: 'ZONE v.2',
-      companyAddress: 'Jl. Industri No. 123, Jakarta Pusat',
-      companyPhone: '+62 21 1234 5678',
-      companyEmail: 'info@zone.com',
-      companyWebsite: 'www.zone.com',
-      taxNumber: '123456789012345',
+      company_name: 'ZONE v.2',
+      company_address: 'Jl. Industri No. 123, Jakarta Pusat',
+      company_phone: '+62 21 1234 5678',
+      company_email: 'info@zone.com',
+      company_website: 'www.zone.com',
+      tax_number: '123456789012345',
       currency: 'IDR',
       timezone: 'Asia/Jakarta',
-      dateFormat: 'DD/MM/YYYY',
-      timeFormat: '24h'
+      date_format: 'DD/MM/YYYY',
+      time_format: '24h'
     },
     database: {
-      dbHost: 'localhost',
-      dbPort: '27017',
-      dbName: 'zone_db',
-      backupFrequency: 'daily',
-      lastBackup: '2024-01-20 02:00:00',
-      autoBackup: true,
-      backupRetention: '30'
+      db_host: 'localhost',
+      db_port: '27017',
+      db_name: 'zone_db',
+      backup_frequency: 'daily',
+      last_backup: '2024-01-20 02:00:00',
+      auto_backup: true,
+      backup_retention: '30'
     },
     email: {
-      smtpHost: 'smtp.gmail.com',
-      smtpPort: '587',
-      smtpUsername: 'noreply@zone.com',
-      smtpPassword: '********',
-      smtpEncryption: 'TLS',
-      fromName: 'ZONE System',
-      fromEmail: 'noreply@zone.com'
+      smtp_host: 'smtp.gmail.com',
+      smtp_port: '587',
+      smtp_username: 'noreply@zone.com',
+      smtp_password: '********',
+      smtp_encryption: 'TLS',
+      from_name: 'ZONE System',
+      from_email: 'noreply@zone.com'
     },
     notifications: {
-      emailNotifications: true,
-      smsNotifications: false,
-      pushNotifications: true,
-      lowStockAlert: true,
-      paymentReminder: true,
-      systemMaintenance: true,
-      newUserAlert: true,
-      orderStatusUpdate: true
+      email_notifications: true,
+      sms_notifications: false,
+      push_notifications: true,
+      low_stock_alert: true,
+      payment_reminder: true,
+      order_status_update: true,
+      system_maintenance: true
     },
     security: {
-      sessionTimeout: '30',
-      passwordMinLength: '8',
-      requireSpecialChars: true,
-      requireNumbers: true,
-      requireUppercase: true,
-      maxLoginAttempts: '5',
-      lockoutDuration: '15',
-      twoFactorAuth: false,
-      ipWhitelist: '',
-      auditLog: true
+      password_policy: 'strong',
+      session_timeout: '30',
+      two_factor_auth: false,
+      ip_whitelist: '',
+      login_attempts: '5',
+      account_lockout: '15'
     },
     appearance: {
       theme: 'light',
-      primaryColor: '#ef4444',
-      secondaryColor: '#64748b',
-      sidebarCollapsed: false,
-      showNotifications: true,
-      showQuickActions: true,
-      defaultPageSize: '25',
-      autoRefresh: true,
-      refreshInterval: '30'
+      primary_color: '#3B82F6',
+      sidebar_collapsed: false,
+      language: 'id',
+      font_size: 'medium'
     }
   });
 
-  const [hasChanges, setHasChanges] = useState(false);
-
   useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const res = await fetch(`${API}/settings`);
-        if (!res.ok) throw new Error(`Failed to load settings (${res.status})`);
-        const data = await res.json();
-        setSettings(data);
-        setHasChanges(false);
-      } catch (e) {
-        setError(String(e));
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadSettings();
+    fetchSettings();
   }, []);
+
+  const fetchSettings = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_URL}/settings`);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      setSettings(data);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching settings:', err);
+      setError(err.message);
+      // Keep default settings if API fails
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveSettings = async () => {
+    try {
+      setSaving(true);
+      const response = await fetch(`${API_URL}/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings)
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      alert('Settings saved successfully!');
+      setError(null);
+    } catch (err) {
+      console.error('Error saving settings:', err);
+      setError(err.message);
+      alert(`Error saving settings: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleSettingChange = (category, key, value) => {
     setSettings(prev => ({
@@ -107,121 +123,53 @@ const Settings = () => {
         [key]: value
       }
     }));
-    setHasChanges(true);
   };
 
-  const handleSaveSettings = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const res = await fetch(`${API}/settings`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(settings)
-      });
-      if (!res.ok) {
-        let info = '';
-        try { info = await res.text(); } catch {}
-        throw new Error(`Failed to save settings (${res.status}) ${info}`);
-      }
-      const data = await res.json();
-      setSettings(data);
-      setHasChanges(false);
-      alert('Settings saved successfully!');
-    } catch (e) {
-      setError(String(e));
-      alert(String(e));
-    } finally {
-      setLoading(false);
+  const resetSettings = () => {
+    if (confirm('Reset all settings to default? This action cannot be undone.')) {
+      fetchSettings();
     }
   };
 
-  const handleResetSettings = async () => {
-    if (confirm('Are you sure you want to discard unsaved changes and reload from server?')) {
-      try {
-        setLoading(true);
-        setError(null);
-        const res = await fetch(`${API}/settings`);
-        if (!res.ok) throw new Error(`Failed to reload settings (${res.status})`);
-        const data = await res.json();
-        setSettings(data);
-        setHasChanges(false);
-      } catch (e) {
-        setError(String(e));
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
-  const handleBackupDatabase = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const res = await fetch(`${API}/settings/backup`, { method: 'POST' });
-      if (!res.ok) throw new Error(`Failed to create backup (${res.status})`);
-      const data = await res.json();
-      alert('Backup created successfully');
-      // update lastBackup in UI
-      setSettings(prev => ({
-        ...prev,
-        database: { ...prev.database, lastBackup: new Date().toISOString().slice(0, 19).replace('T', ' ') }
-      }));
-    } catch (e) {
-      setError(String(e));
-      alert('Failed to create backup.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRestoreDatabase = async () => {
-    if (!confirm('Restore the most recent backup? Current settings will be overwritten.')) return;
-    try {
-      setLoading(true);
-      setError(null);
-      const res = await fetch(`${API}/settings/restore`, { method: 'POST' });
-      if (!res.ok) throw new Error(`Failed to restore settings (${res.status})`);
-      // reload settings after restore
-      const reload = await fetch(`${API}/settings`);
-      const data = await reload.json();
-      setSettings(data);
-      setHasChanges(false);
-      alert('Settings restored from backup.');
-    } catch (e) {
-      setError(String(e));
-      alert('Failed to restore settings.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  if (loading) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Memuat pengaturan...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">System Settings</h1>
-          <p className="text-gray-600">Konfigurasi sistem dan pengaturan aplikasi</p>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">Pengaturan</h1>
+          <p className="text-gray-600">
+            Kelola konfigurasi sistem
+            {error && (
+              <span className="ml-2 text-orange-600 text-sm">(Menggunakan data offline)</span>
+            )}
+          </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleResetSettings}>
+          <Button variant="outline" onClick={resetSettings}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Reset
           </Button>
-          <Button 
-            className="bg-red-500 hover:bg-red-600 text-white"
-            onClick={handleSaveSettings}
-            disabled={!hasChanges || loading}
-          >
+          <Button onClick={saveSettings} disabled={saving} className="bg-red-500 hover:bg-red-600 text-white">
             <Save className="h-4 w-4 mr-2" />
-            Save Settings
+            {saving ? 'Menyimpan...' : 'Simpan'}
           </Button>
         </div>
       </div>
 
-      {/* Settings Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="database">Database</TabsTrigger>
@@ -232,104 +180,72 @@ const Settings = () => {
         </TabsList>
 
         {/* General Settings */}
-        <TabsContent value="general" className="space-y-4">
+        <TabsContent value="general" className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Globe className="h-5 w-5" />
-                Company Information
+                Informasi Perusahaan
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="companyName">Company Name</Label>
+                  <Label htmlFor="company_name">Nama Perusahaan</Label>
                   <Input
-                    id="companyName"
-                    value={settings.general.companyName}
-                    onChange={(e) => handleSettingChange('general', 'companyName', e.target.value)}
+                    id="company_name"
+                    value={settings.general.company_name}
+                    onChange={(e) => handleSettingChange('general', 'company_name', e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="companyEmail">Company Email</Label>
+                  <Label htmlFor="company_phone">Telepon</Label>
                   <Input
-                    id="companyEmail"
+                    id="company_phone"
+                    value={settings.general.company_phone}
+                    onChange={(e) => handleSettingChange('general', 'company_phone', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="company_email">Email</Label>
+                  <Input
+                    id="company_email"
                     type="email"
-                    value={settings.general.companyEmail}
-                    onChange={(e) => handleSettingChange('general', 'companyEmail', e.target.value)}
+                    value={settings.general.company_email}
+                    onChange={(e) => handleSettingChange('general', 'company_email', e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="companyPhone">Company Phone</Label>
+                  <Label htmlFor="company_website">Website</Label>
                   <Input
-                    id="companyPhone"
-                    value={settings.general.companyPhone}
-                    onChange={(e) => handleSettingChange('general', 'companyPhone', e.target.value)}
+                    id="company_website"
+                    value={settings.general.company_website}
+                    onChange={(e) => handleSettingChange('general', 'company_website', e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="companyWebsite">Company Website</Label>
+                  <Label htmlFor="tax_number">NPWP</Label>
                   <Input
-                    id="companyWebsite"
-                    value={settings.general.companyWebsite}
-                    onChange={(e) => handleSettingChange('general', 'companyWebsite', e.target.value)}
+                    id="tax_number"
+                    value={settings.general.tax_number}
+                    onChange={(e) => handleSettingChange('general', 'tax_number', e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="taxNumber">Tax Number</Label>
+                  <Label htmlFor="currency">Mata Uang</Label>
                   <Input
-                    id="taxNumber"
-                    value={settings.general.taxNumber}
-                    onChange={(e) => handleSettingChange('general', 'taxNumber', e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="currency">Currency</Label>
-                  <select
                     id="currency"
                     value={settings.general.currency}
                     onChange={(e) => handleSettingChange('general', 'currency', e.target.value)}
-                    className="w-full p-2 border rounded-md"
-                  >
-                    <option value="IDR">IDR - Indonesian Rupiah</option>
-                    <option value="USD">USD - US Dollar</option>
-                    <option value="EUR">EUR - Euro</option>
-                    <option value="SGD">SGD - Singapore Dollar</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="timezone">Timezone</Label>
-                  <select
-                    id="timezone"
-                    value={settings.general.timezone}
-                    onChange={(e) => handleSettingChange('general', 'timezone', e.target.value)}
-                    className="w-full p-2 border rounded-md"
-                  >
-                    <option value="Asia/Jakarta">Asia/Jakarta</option>
-                    <option value="Asia/Singapore">Asia/Singapore</option>
-                    <option value="UTC">UTC</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="dateFormat">Date Format</Label>
-                  <select
-                    id="dateFormat"
-                    value={settings.general.dateFormat}
-                    onChange={(e) => handleSettingChange('general', 'dateFormat', e.target.value)}
-                    className="w-full p-2 border rounded-md"
-                  >
-                    <option value="DD/MM/YYYY">DD/MM/YYYY</option>
-                    <option value="MM/DD/YYYY">MM/DD/YYYY</option>
-                    <option value="YYYY-MM-DD">YYYY-MM-DD</option>
-                  </select>
+                  />
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="companyAddress">Company Address</Label>
+                <Label htmlFor="company_address">Alamat</Label>
                 <Input
-                  id="companyAddress"
-                  value={settings.general.companyAddress}
-                  onChange={(e) => handleSettingChange('general', 'companyAddress', e.target.value)}
+                  id="company_address"
+                  value={settings.general.company_address}
+                  onChange={(e) => handleSettingChange('general', 'company_address', e.target.value)}
                 />
               </div>
             </CardContent>
@@ -337,7 +253,7 @@ const Settings = () => {
         </TabsContent>
 
         {/* Database Settings */}
-        <TabsContent value="database" className="space-y-4">
+        <TabsContent value="database" className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -346,81 +262,52 @@ const Settings = () => {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="dbHost">Database Host</Label>
+                  <Label htmlFor="db_host">Host</Label>
                   <Input
-                    id="dbHost"
-                    value={settings.database.dbHost}
-                    onChange={(e) => handleSettingChange('database', 'dbHost', e.target.value)}
+                    id="db_host"
+                    value={settings.database.db_host}
+                    onChange={(e) => handleSettingChange('database', 'db_host', e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="dbPort">Database Port</Label>
+                  <Label htmlFor="db_port">Port</Label>
                   <Input
-                    id="dbPort"
-                    value={settings.database.dbPort}
-                    onChange={(e) => handleSettingChange('database', 'dbPort', e.target.value)}
+                    id="db_port"
+                    value={settings.database.db_port}
+                    onChange={(e) => handleSettingChange('database', 'db_port', e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="dbName">Database Name</Label>
+                  <Label htmlFor="db_name">Database Name</Label>
                   <Input
-                    id="dbName"
-                    value={settings.database.dbName}
-                    onChange={(e) => handleSettingChange('database', 'dbName', e.target.value)}
+                    id="db_name"
+                    value={settings.database.db_name}
+                    onChange={(e) => handleSettingChange('database', 'db_name', e.target.value)}
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="backupFrequency">Backup Frequency</Label>
-                  <select
-                    id="backupFrequency"
-                    value={settings.database.backupFrequency}
-                    onChange={(e) => handleSettingChange('database', 'backupFrequency', e.target.value)}
-                    className="w-full p-2 border rounded-md"
-                  >
-                    <option value="hourly">Hourly</option>
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                    <option value="monthly">Monthly</option>
-                  </select>
                 </div>
               </div>
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="autoBackup"
-                  checked={settings.database.autoBackup}
-                  onChange={(e) => handleSettingChange('database', 'autoBackup', e.target.checked)}
-                  className="rounded"
-                />
-                <Label htmlFor="autoBackup">Enable Automatic Backup</Label>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="backupRetention">Backup Retention (days)</Label>
-                <Input
-                  id="backupRetention"
-                  type="number"
-                  value={settings.database.backupRetention}
-                  onChange={(e) => handleSettingChange('database', 'backupRetention', e.target.value)}
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="auto_backup">Auto Backup</Label>
+                  <p className="text-sm text-gray-500">Enable automatic database backup</p>
+                </div>
+                <Switch
+                  id="auto_backup"
+                  checked={settings.database.auto_backup}
+                  onCheckedChange={(checked) => handleSettingChange('database', 'auto_backup', checked)}
                 />
               </div>
-              <div className="flex gap-2">
-                <Button onClick={handleBackupDatabase} variant="outline">
-                  <Download className="h-4 w-4 mr-2" />
-                  Backup Now
-                </Button>
-                <Button onClick={handleRestoreDatabase} variant="outline">
-                  <Upload className="h-4 w-4 mr-2" />
-                  Restore
-                </Button>
+              <div className="text-sm text-gray-600">
+                Last backup: {settings.database.last_backup}
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* Email Settings */}
-        <TabsContent value="email" className="space-y-4">
+        <TabsContent value="email" className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -429,173 +316,75 @@ const Settings = () => {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="smtpHost">SMTP Host</Label>
+                  <Label htmlFor="smtp_host">SMTP Host</Label>
                   <Input
-                    id="smtpHost"
-                    value={settings.email.smtpHost}
-                    onChange={(e) => handleSettingChange('email', 'smtpHost', e.target.value)}
+                    id="smtp_host"
+                    value={settings.email.smtp_host}
+                    onChange={(e) => handleSettingChange('email', 'smtp_host', e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="smtpPort">SMTP Port</Label>
+                  <Label htmlFor="smtp_port">SMTP Port</Label>
                   <Input
-                    id="smtpPort"
-                    value={settings.email.smtpPort}
-                    onChange={(e) => handleSettingChange('email', 'smtpPort', e.target.value)}
+                    id="smtp_port"
+                    value={settings.email.smtp_port}
+                    onChange={(e) => handleSettingChange('email', 'smtp_port', e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="smtpUsername">SMTP Username</Label>
+                  <Label htmlFor="smtp_username">Username</Label>
                   <Input
-                    id="smtpUsername"
-                    value={settings.email.smtpUsername}
-                    onChange={(e) => handleSettingChange('email', 'smtpUsername', e.target.value)}
+                    id="smtp_username"
+                    value={settings.email.smtp_username}
+                    onChange={(e) => handleSettingChange('email', 'smtp_username', e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="smtpPassword">SMTP Password</Label>
+                  <Label htmlFor="smtp_password">Password</Label>
                   <Input
-                    id="smtpPassword"
+                    id="smtp_password"
                     type="password"
-                    value={settings.email.smtpPassword}
-                    onChange={(e) => handleSettingChange('email', 'smtpPassword', e.target.value)}
+                    value={settings.email.smtp_password}
+                    onChange={(e) => handleSettingChange('email', 'smtp_password', e.target.value)}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="smtpEncryption">SMTP Encryption</Label>
-                  <select
-                    id="smtpEncryption"
-                    value={settings.email.smtpEncryption}
-                    onChange={(e) => handleSettingChange('email', 'smtpEncryption', e.target.value)}
-                    className="w-full p-2 border rounded-md"
-                  >
-                    <option value="TLS">TLS</option>
-                    <option value="SSL">SSL</option>
-                    <option value="None">None</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="fromName">From Name</Label>
-                  <Input
-                    id="fromName"
-                    value={settings.email.fromName}
-                    onChange={(e) => handleSettingChange('email', 'fromName', e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="fromEmail">From Email</Label>
-                <Input
-                  id="fromEmail"
-                  type="email"
-                  value={settings.email.fromEmail}
-                  onChange={(e) => handleSettingChange('email', 'fromEmail', e.target.value)}
-                />
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* Notifications Settings */}
-        <TabsContent value="notifications" className="space-y-4">
+        <TabsContent value="notifications" className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Bell className="h-5 w-5" />
-                Notification Settings
+                Notification Preferences
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="emailNotifications">Email Notifications</Label>
-                  <input
-                    type="checkbox"
-                    id="emailNotifications"
-                    checked={settings.notifications.emailNotifications}
-                    onChange={(e) => handleSettingChange('notifications', 'emailNotifications', e.target.checked)}
-                    className="rounded"
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="smsNotifications">SMS Notifications</Label>
-                  <input
-                    type="checkbox"
-                    id="smsNotifications"
-                    checked={settings.notifications.smsNotifications}
-                    onChange={(e) => handleSettingChange('notifications', 'smsNotifications', e.target.checked)}
-                    className="rounded"
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="pushNotifications">Push Notifications</Label>
-                  <input
-                    type="checkbox"
-                    id="pushNotifications"
-                    checked={settings.notifications.pushNotifications}
-                    onChange={(e) => handleSettingChange('notifications', 'pushNotifications', e.target.checked)}
-                    className="rounded"
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="lowStockAlert">Low Stock Alert</Label>
-                  <input
-                    type="checkbox"
-                    id="lowStockAlert"
-                    checked={settings.notifications.lowStockAlert}
-                    onChange={(e) => handleSettingChange('notifications', 'lowStockAlert', e.target.checked)}
-                    className="rounded"
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="paymentReminder">Payment Reminder</Label>
-                  <input
-                    type="checkbox"
-                    id="paymentReminder"
-                    checked={settings.notifications.paymentReminder}
-                    onChange={(e) => handleSettingChange('notifications', 'paymentReminder', e.target.checked)}
-                    className="rounded"
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="systemMaintenance">System Maintenance</Label>
-                  <input
-                    type="checkbox"
-                    id="systemMaintenance"
-                    checked={settings.notifications.systemMaintenance}
-                    onChange={(e) => handleSettingChange('notifications', 'systemMaintenance', e.target.checked)}
-                    className="rounded"
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="newUserAlert">New User Alert</Label>
-                  <input
-                    type="checkbox"
-                    id="newUserAlert"
-                    checked={settings.notifications.newUserAlert}
-                    onChange={(e) => handleSettingChange('notifications', 'newUserAlert', e.target.checked)}
-                    className="rounded"
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="orderStatusUpdate">Order Status Update</Label>
-                  <input
-                    type="checkbox"
-                    id="orderStatusUpdate"
-                    checked={settings.notifications.orderStatusUpdate}
-                    onChange={(e) => handleSettingChange('notifications', 'orderStatusUpdate', e.target.checked)}
-                    className="rounded"
-                  />
-                </div>
+                {Object.entries(settings.notifications).map(([key, value]) => (
+                  <div key={key} className="flex items-center justify-between">
+                    <div>
+                      <Label htmlFor={key}>{key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</Label>
+                    </div>
+                    <Switch
+                      id={key}
+                      checked={value}
+                      onCheckedChange={(checked) => handleSettingChange('notifications', key, checked)}
+                    />
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* Security Settings */}
-        <TabsContent value="security" className="space-y-4">
+        <TabsContent value="security" className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -604,103 +393,52 @@ const Settings = () => {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="sessionTimeout">Session Timeout (minutes)</Label>
+                  <Label htmlFor="password_policy">Password Policy</Label>
                   <Input
-                    id="sessionTimeout"
-                    type="number"
-                    value={settings.security.sessionTimeout}
-                    onChange={(e) => handleSettingChange('security', 'sessionTimeout', e.target.value)}
+                    id="password_policy"
+                    value={settings.security.password_policy}
+                    onChange={(e) => handleSettingChange('security', 'password_policy', e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="passwordMinLength">Password Min Length</Label>
+                  <Label htmlFor="session_timeout">Session Timeout (minutes)</Label>
                   <Input
-                    id="passwordMinLength"
+                    id="session_timeout"
                     type="number"
-                    value={settings.security.passwordMinLength}
-                    onChange={(e) => handleSettingChange('security', 'passwordMinLength', e.target.value)}
+                    value={settings.security.session_timeout}
+                    onChange={(e) => handleSettingChange('security', 'session_timeout', e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="maxLoginAttempts">Max Login Attempts</Label>
+                  <Label htmlFor="login_attempts">Max Login Attempts</Label>
                   <Input
-                    id="maxLoginAttempts"
+                    id="login_attempts"
                     type="number"
-                    value={settings.security.maxLoginAttempts}
-                    onChange={(e) => handleSettingChange('security', 'maxLoginAttempts', e.target.value)}
+                    value={settings.security.login_attempts}
+                    onChange={(e) => handleSettingChange('security', 'login_attempts', e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="lockoutDuration">Lockout Duration (minutes)</Label>
+                  <Label htmlFor="account_lockout">Account Lockout (minutes)</Label>
                   <Input
-                    id="lockoutDuration"
+                    id="account_lockout"
                     type="number"
-                    value={settings.security.lockoutDuration}
-                    onChange={(e) => handleSettingChange('security', 'lockoutDuration', e.target.value)}
+                    value={settings.security.account_lockout}
+                    onChange={(e) => handleSettingChange('security', 'account_lockout', e.target.value)}
                   />
                 </div>
               </div>
-              <div className="space-y-4">
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="requireSpecialChars"
-                    checked={settings.security.requireSpecialChars}
-                    onChange={(e) => handleSettingChange('security', 'requireSpecialChars', e.target.checked)}
-                    className="rounded"
-                  />
-                  <Label htmlFor="requireSpecialChars">Require Special Characters in Password</Label>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="two_factor_auth">Two-Factor Authentication</Label>
+                  <p className="text-sm text-gray-500">Enable 2FA for enhanced security</p>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="requireNumbers"
-                    checked={settings.security.requireNumbers}
-                    onChange={(e) => handleSettingChange('security', 'requireNumbers', e.target.checked)}
-                    className="rounded"
-                  />
-                  <Label htmlFor="requireNumbers">Require Numbers in Password</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="requireUppercase"
-                    checked={settings.security.requireUppercase}
-                    onChange={(e) => handleSettingChange('security', 'requireUppercase', e.target.checked)}
-                    className="rounded"
-                  />
-                  <Label htmlFor="requireUppercase">Require Uppercase in Password</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="twoFactorAuth"
-                    checked={settings.security.twoFactorAuth}
-                    onChange={(e) => handleSettingChange('security', 'twoFactorAuth', e.target.checked)}
-                    className="rounded"
-                  />
-                  <Label htmlFor="twoFactorAuth">Enable Two-Factor Authentication</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="auditLog"
-                    checked={settings.security.auditLog}
-                    onChange={(e) => handleSettingChange('security', 'auditLog', e.target.checked)}
-                    className="rounded"
-                  />
-                  <Label htmlFor="auditLog">Enable Audit Logging</Label>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="ipWhitelist">IP Whitelist (comma-separated)</Label>
-                <Input
-                  id="ipWhitelist"
-                  value={settings.security.ipWhitelist}
-                  onChange={(e) => handleSettingChange('security', 'ipWhitelist', e.target.value)}
-                  placeholder="192.168.1.1, 10.0.0.1"
+                <Switch
+                  id="two_factor_auth"
+                  checked={settings.security.two_factor_auth}
+                  onCheckedChange={(checked) => handleSettingChange('security', 'two_factor_auth', checked)}
                 />
               </div>
             </CardContent>
@@ -708,7 +446,7 @@ const Settings = () => {
         </TabsContent>
 
         {/* Appearance Settings */}
-        <TabsContent value="appearance" className="space-y-4">
+        <TabsContent value="appearance" className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -717,136 +455,58 @@ const Settings = () => {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="theme">Theme</Label>
-                  <select
+                  <Input
                     id="theme"
                     value={settings.appearance.theme}
                     onChange={(e) => handleSettingChange('appearance', 'theme', e.target.value)}
-                    className="w-full p-2 border rounded-md"
-                  >
-                    <option value="light">Light</option>
-                    <option value="dark">Dark</option>
-                    <option value="auto">Auto</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="primaryColor">Primary Color</Label>
-                  <Input
-                    id="primaryColor"
-                    type="color"
-                    value={settings.appearance.primaryColor}
-                    onChange={(e) => handleSettingChange('appearance', 'primaryColor', e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="secondaryColor">Secondary Color</Label>
+                  <Label htmlFor="primary_color">Primary Color</Label>
                   <Input
-                    id="secondaryColor"
+                    id="primary_color"
                     type="color"
-                    value={settings.appearance.secondaryColor}
-                    onChange={(e) => handleSettingChange('appearance', 'secondaryColor', e.target.value)}
+                    value={settings.appearance.primary_color}
+                    onChange={(e) => handleSettingChange('appearance', 'primary_color', e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="defaultPageSize">Default Page Size</Label>
-                  <select
-                    id="defaultPageSize"
-                    value={settings.appearance.defaultPageSize}
-                    onChange={(e) => handleSettingChange('appearance', 'defaultPageSize', e.target.value)}
-                    className="w-full p-2 border rounded-md"
-                  >
-                    <option value="10">10</option>
-                    <option value="25">25</option>
-                    <option value="50">50</option>
-                    <option value="100">100</option>
-                  </select>
+                  <Label htmlFor="language">Language</Label>
+                  <Input
+                    id="language"
+                    value={settings.appearance.language}
+                    onChange={(e) => handleSettingChange('appearance', 'language', e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="refreshInterval">Auto Refresh Interval (seconds)</Label>
+                  <Label htmlFor="font_size">Font Size</Label>
                   <Input
-                    id="refreshInterval"
-                    type="number"
-                    value={settings.appearance.refreshInterval}
-                    onChange={(e) => handleSettingChange('appearance', 'refreshInterval', e.target.value)}
+                    id="font_size"
+                    value={settings.appearance.font_size}
+                    onChange={(e) => handleSettingChange('appearance', 'font_size', e.target.value)}
                   />
                 </div>
               </div>
-              <div className="space-y-4">
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="sidebarCollapsed"
-                    checked={settings.appearance.sidebarCollapsed}
-                    onChange={(e) => handleSettingChange('appearance', 'sidebarCollapsed', e.target.checked)}
-                    className="rounded"
-                  />
-                  <Label htmlFor="sidebarCollapsed">Collapse Sidebar by Default</Label>
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="sidebar_collapsed">Collapsed Sidebar</Label>
+                  <p className="text-sm text-gray-500">Start with sidebar collapsed</p>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="showNotifications"
-                    checked={settings.appearance.showNotifications}
-                    onChange={(e) => handleSettingChange('appearance', 'showNotifications', e.target.checked)}
-                    className="rounded"
-                  />
-                  <Label htmlFor="showNotifications">Show Notification Badge</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="showQuickActions"
-                    checked={settings.appearance.showQuickActions}
-                    onChange={(e) => handleSettingChange('appearance', 'showQuickActions', e.target.checked)}
-                    className="rounded"
-                  />
-                  <Label htmlFor="showQuickActions">Show Quick Actions</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="autoRefresh"
-                    checked={settings.appearance.autoRefresh}
-                    onChange={(e) => handleSettingChange('appearance', 'autoRefresh', e.target.checked)}
-                    className="rounded"
-                  />
-                  <Label htmlFor="autoRefresh">Enable Auto Refresh</Label>
-                </div>
+                <Switch
+                  id="sidebar_collapsed"
+                  checked={settings.appearance.sidebar_collapsed}
+                  onCheckedChange={(checked) => handleSettingChange('appearance', 'sidebar_collapsed', checked)}
+                />
               </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
-
-      {/* Save Status */}
-      {hasChanges && (
-        <Card className="border-yellow-200 bg-yellow-50">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-yellow-800">
-              <AlertTriangle className="h-4 w-4" />
-              <span>You have unsaved changes. Don't forget to save your settings.</span>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-      {error && (
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-red-800">
-              <AlertTriangle className="h-4 w-4" />
-              <span>{error}</span>
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 };
 
 export default Settings;
-
-
-
-

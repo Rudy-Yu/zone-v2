@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
-import { Plus, Search, Edit, Trash2, Eye, BookOpen, DollarSign, TrendingUp, TrendingDown, Calculator, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Search, Edit, Trash2, Eye, FileText, DollarSign, TrendingUp, TrendingDown } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { 
   Table, 
   TableBody, 
@@ -23,360 +22,249 @@ import {
   DialogTrigger,
 } from './ui/dialog';
 import { Label } from './ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 const ChartOfAccounts = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState(null);
-  const [isBankReconciliationOpen, setIsBankReconciliationOpen] = useState(false);
-  const [bankReconciliation, setBankReconciliation] = useState({
-    bankAccount: '',
-    statementDate: '',
-    statementBalance: '',
-    bookBalance: '',
-    adjustments: []
-  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const [bankTransactions, setBankTransactions] = useState([
-    {
-      id: 'BT-001',
-      date: '2024-01-15',
-      description: 'Deposit from Customer A',
-      debit: 5000000,
-      credit: 0,
-      balance: 55000000,
-      status: 'Cleared'
-    },
-    {
-      id: 'BT-002',
-      date: '2024-01-16',
-      description: 'Payment to Supplier B',
-      debit: 0,
-      credit: 2500000,
-      balance: 52500000,
-      status: 'Cleared'
-    },
-    {
-      id: 'BT-003',
-      date: '2024-01-17',
-      description: 'Bank Service Charge',
-      debit: 0,
-      credit: 50000,
-      balance: 52450000,
-      status: 'Outstanding'
-    },
-    {
-      id: 'BT-004',
-      date: '2024-01-18',
-      description: 'Interest Earned',
-      debit: 100000,
-      credit: 0,
-      balance: 52550000,
-      status: 'Outstanding'
+  const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+  const API_URL = `${BACKEND_URL}/api`;
+
+  const [accounts, setAccounts] = useState([]);
+
+  useEffect(() => {
+    fetchAccounts();
+  }, []);
+
+  const fetchAccounts = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_URL}/chart-of-accounts`);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      setAccounts(data);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching accounts:', err);
+      setError(err.message);
+      setAccounts([
+        {
+          id: 'ACC-001',
+          account_code: '1000',
+          account_name: 'Assets',
+          account_type: 'Asset',
+          parent_account: null,
+          balance: 500000000,
+          normal_balance: 'Debit',
+          status: 'Active',
+          description: 'All company assets',
+          created_at: '2024-01-01 00:00:00'
+        },
+        {
+          id: 'ACC-002',
+          account_code: '1100',
+          account_name: 'Current Assets',
+          account_type: 'Asset',
+          parent_account: 'Assets',
+          balance: 300000000,
+          normal_balance: 'Debit',
+          status: 'Active',
+          description: 'Current assets including cash and inventory',
+          created_at: '2024-01-01 00:00:00'
+        },
+        {
+          id: 'ACC-003',
+          account_code: '1110',
+          account_name: 'Cash',
+          account_type: 'Asset',
+          parent_account: 'Current Assets',
+          balance: 150000000,
+          normal_balance: 'Debit',
+          status: 'Active',
+          description: 'Cash and cash equivalents',
+          created_at: '2024-01-01 00:00:00'
+        },
+        {
+          id: 'ACC-004',
+          account_code: '2000',
+          account_name: 'Liabilities',
+          account_type: 'Liability',
+          parent_account: null,
+          balance: 200000000,
+          normal_balance: 'Credit',
+          status: 'Active',
+          description: 'All company liabilities',
+          created_at: '2024-01-01 00:00:00'
+        },
+        {
+          id: 'ACC-005',
+          account_code: '3000',
+          account_name: 'Equity',
+          account_type: 'Equity',
+          parent_account: null,
+          balance: 300000000,
+          normal_balance: 'Credit',
+          status: 'Active',
+          description: 'Shareholders equity',
+          created_at: '2024-01-01 00:00:00'
+        },
+        {
+          id: 'ACC-006',
+          account_code: '4000',
+          account_name: 'Revenue',
+          account_type: 'Revenue',
+          parent_account: null,
+          balance: 450000000,
+          normal_balance: 'Credit',
+          status: 'Active',
+          description: 'All revenue accounts',
+          created_at: '2024-01-01 00:00:00'
+        },
+        {
+          id: 'ACC-007',
+          account_code: '5000',
+          account_name: 'Expenses',
+          account_type: 'Expense',
+          parent_account: null,
+          balance: 250000000,
+          normal_balance: 'Debit',
+          status: 'Active',
+          description: 'All expense accounts',
+          created_at: '2024-01-01 00:00:00'
+        }
+      ]);
+    } finally {
+      setLoading(false);
     }
-  ]);
-
-  const bankAccounts = [
-    { id: 'BANK-001', name: 'BCA - Main Account', accountNumber: '1234567890', balance: 52550000 },
-    { id: 'BANK-002', name: 'Mandiri - Business Account', accountNumber: '0987654321', balance: 15000000 },
-    { id: 'BANK-003', name: 'BNI - Savings Account', accountNumber: '1122334455', balance: 5000000 }
-  ];
-
-  const handleBankReconciliation = () => {
-    // Process bank reconciliation
-    const reconciledTransactions = bankTransactions.filter(t => t.status === 'Cleared');
-    const outstandingTransactions = bankTransactions.filter(t => t.status === 'Outstanding');
-    
-    // Calculate adjusted book balance
-    const adjustments = outstandingTransactions.map(t => ({
-      id: t.id,
-      description: t.description,
-      amount: t.debit - t.credit,
-      type: t.debit > 0 ? 'Add' : 'Subtract'
-    }));
-    
-    setBankReconciliation({
-      ...bankReconciliation,
-      adjustments: adjustments
-    });
-    
-    setIsBankReconciliationOpen(false);
   };
-  
-  const [accounts, setAccounts] = useState([
-    {
-      id: 'ACC-001',
-      accountCode: '1000',
-      accountName: 'Cash and Cash Equivalents',
-      accountType: 'Assets',
-      accountCategory: 'Current Assets',
-      parentAccount: null,
-      balance: 50000000,
-      normalBalance: 'Debit',
-      isActive: true,
-      description: 'Cash on hand and in bank accounts',
-      createdAt: '2023-01-01 00:00:00'
-    },
-    {
-      id: 'ACC-002',
-      accountCode: '1100',
-      accountName: 'Accounts Receivable',
-      accountType: 'Assets',
-      accountCategory: 'Current Assets',
-      parentAccount: '1000',
-      balance: 75000000,
-      normalBalance: 'Debit',
-      isActive: true,
-      description: 'Amounts owed by customers',
-      createdAt: '2023-01-01 00:00:00'
-    },
-    {
-      id: 'ACC-003',
-      accountCode: '1200',
-      accountName: 'Inventory',
-      accountType: 'Assets',
-      accountCategory: 'Current Assets',
-      parentAccount: '1000',
-      balance: 150000000,
-      normalBalance: 'Debit',
-      isActive: true,
-      description: 'Raw materials, work in progress, finished goods',
-      createdAt: '2023-01-01 00:00:00'
-    },
-    {
-      id: 'ACC-004',
-      accountCode: '1500',
-      accountName: 'Equipment',
-      accountType: 'Assets',
-      accountCategory: 'Fixed Assets',
-      parentAccount: null,
-      balance: 300000000,
-      normalBalance: 'Debit',
-      isActive: true,
-      description: 'Manufacturing equipment and machinery',
-      createdAt: '2023-01-01 00:00:00'
-    },
-    {
-      id: 'ACC-005',
-      accountCode: '1510',
-      accountName: 'Accumulated Depreciation - Equipment',
-      accountType: 'Assets',
-      accountCategory: 'Fixed Assets',
-      parentAccount: '1500',
-      balance: -50000000,
-      normalBalance: 'Credit',
-      isActive: true,
-      description: 'Accumulated depreciation on equipment',
-      createdAt: '2023-01-01 00:00:00'
-    },
-    {
-      id: 'ACC-006',
-      accountCode: '2000',
-      accountName: 'Accounts Payable',
-      accountType: 'Liabilities',
-      accountCategory: 'Current Liabilities',
-      parentAccount: null,
-      balance: 45000000,
-      normalBalance: 'Credit',
-      isActive: true,
-      description: 'Amounts owed to suppliers',
-      createdAt: '2023-01-01 00:00:00'
-    },
-    {
-      id: 'ACC-007',
-      accountCode: '2100',
-      accountName: 'Accrued Expenses',
-      accountType: 'Liabilities',
-      accountCategory: 'Current Liabilities',
-      parentAccount: '2000',
-      balance: 15000000,
-      normalBalance: 'Credit',
-      isActive: true,
-      description: 'Expenses incurred but not yet paid',
-      createdAt: '2023-01-01 00:00:00'
-    },
-    {
-      id: 'ACC-008',
-      accountCode: '3000',
-      accountName: 'Owner\'s Equity',
-      accountType: 'Equity',
-      accountCategory: 'Capital',
-      parentAccount: null,
-      balance: 400000000,
-      normalBalance: 'Credit',
-      isActive: true,
-      description: 'Owner\'s investment in the business',
-      createdAt: '2023-01-01 00:00:00'
-    },
-    {
-      id: 'ACC-009',
-      accountCode: '4000',
-      accountName: 'Sales Revenue',
-      accountType: 'Revenue',
-      accountCategory: 'Operating Revenue',
-      parentAccount: null,
-      balance: 800000000,
-      normalBalance: 'Credit',
-      isActive: true,
-      description: 'Revenue from product sales',
-      createdAt: '2023-01-01 00:00:00'
-    },
-    {
-      id: 'ACC-010',
-      accountCode: '5000',
-      accountName: 'Cost of Goods Sold',
-      accountType: 'Expenses',
-      accountCategory: 'Operating Expenses',
-      parentAccount: null,
-      balance: 450000000,
-      normalBalance: 'Debit',
-      isActive: true,
-      description: 'Direct costs associated with production',
-      createdAt: '2023-01-01 00:00:00'
-    },
-    {
-      id: 'ACC-011',
-      accountCode: '6000',
-      accountName: 'Operating Expenses',
-      accountType: 'Expenses',
-      accountCategory: 'Operating Expenses',
-      parentAccount: null,
-      balance: 200000000,
-      normalBalance: 'Debit',
-      isActive: true,
-      description: 'General operating expenses',
-      createdAt: '2023-01-01 00:00:00'
-    },
-    {
-      id: 'ACC-012',
-      accountCode: '6100',
-      accountName: 'Salaries and Wages',
-      accountType: 'Expenses',
-      accountCategory: 'Operating Expenses',
-      parentAccount: '6000',
-      balance: 120000000,
-      normalBalance: 'Debit',
-      isActive: true,
-      description: 'Employee salaries and wages',
-      createdAt: '2023-01-01 00:00:00'
-    }
-  ]);
 
   const [newAccount, setNewAccount] = useState({
-    accountCode: '',
-    accountName: '',
-    accountType: 'Assets',
-    accountCategory: '',
-    parentAccount: '',
-    normalBalance: 'Debit',
-    isActive: true,
+    account_code: '',
+    account_name: '',
+    account_type: 'Asset',
+    parent_account: '',
+    normal_balance: 'Debit',
     description: ''
   });
 
-  const getAccountTypeColor = (type) => {
-    switch (type) {
-      case 'Assets': return 'bg-blue-100 text-blue-800';
-      case 'Liabilities': return 'bg-red-100 text-red-800';
-      case 'Equity': return 'bg-green-100 text-green-800';
-      case 'Revenue': return 'bg-purple-100 text-purple-800';
-      case 'Expenses': return 'bg-orange-100 text-orange-800';
-      default: return 'bg-gray-100 text-gray-800';
+  const handleAddAccount = async () => {
+    try {
+      const response = await fetch(`${API_URL}/chart-of-accounts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newAccount)
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const created = await response.json();
+      setAccounts(prev => [...prev, created]);
+      setNewAccount({
+        account_code: '',
+        account_name: '',
+        account_type: 'Asset',
+        parent_account: '',
+        normal_balance: 'Debit',
+        description: ''
+      });
+      setIsAddDialogOpen(false);
+    } catch (err) {
+      console.error('Error creating account:', err);
+      alert(`Error: ${err.message}`);
     }
-  };
-
-  const getNormalBalanceColor = (balance) => {
-    switch (balance) {
-      case 'Debit': return 'text-blue-600';
-      case 'Credit': return 'text-green-600';
-      default: return 'text-gray-600';
-    }
-  };
-
-  const getBalanceColor = (balance, normalBalance) => {
-    const isPositive = balance >= 0;
-    const isNormal = (normalBalance === 'Debit' && isPositive) || (normalBalance === 'Credit' && !isPositive);
-    return isNormal ? 'text-green-600' : 'text-red-600';
-  };
-
-  const filteredAccounts = accounts.filter(account =>
-    account.accountCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    account.accountName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    account.accountType.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    account.accountCategory.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const handleAddAccount = () => {
-    const account = {
-      id: `ACC-${String(accounts.length + 1).padStart(3, '0')}`,
-      ...newAccount,
-      balance: 0,
-      createdAt: new Date().toISOString()
-    };
-    
-    setAccounts([...accounts, account]);
-    setNewAccount({
-      accountCode: '',
-      accountName: '',
-      accountType: 'Assets',
-      accountCategory: '',
-      parentAccount: '',
-      normalBalance: 'Debit',
-      isActive: true,
-      description: ''
-    });
-    setIsAddDialogOpen(false);
   };
 
   const handleEditAccount = (account) => {
     setEditingAccount(account);
-    setNewAccount(account);
+    setNewAccount({
+      account_code: account.account_code,
+      account_name: account.account_name,
+      account_type: account.account_type,
+      parent_account: account.parent_account || '',
+      normal_balance: account.normal_balance,
+      description: account.description
+    });
     setIsAddDialogOpen(true);
   };
 
-  const handleUpdateAccount = () => {
-    setAccounts(accounts.map(account => 
-      account.id === editingAccount.id ? { ...account, ...newAccount } : account
-    ));
-    setEditingAccount(null);
-    setIsAddDialogOpen(false);
-  };
-
-  const handleDeleteAccount = (accountId) => {
-    if (confirm('Apakah Anda yakin ingin menghapus account ini?')) {
-      setAccounts(accounts.filter(account => account.id !== accountId));
+  const handleUpdateAccount = async () => {
+    if (!editingAccount) return;
+    try {
+      const response = await fetch(`${API_URL}/chart-of-accounts/${editingAccount.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newAccount)
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const updated = await response.json();
+      setAccounts(prev => prev.map(a => a.id === editingAccount.id ? updated : a));
+      setEditingAccount(null);
+      setNewAccount({
+        account_code: '',
+        account_name: '',
+        account_type: 'Asset',
+        parent_account: '',
+        normal_balance: 'Debit',
+        description: ''
+      });
+      setIsAddDialogOpen(false);
+    } catch (err) {
+      console.error('Error updating account:', err);
+      alert(`Error: ${err.message}`);
     }
   };
 
-  const toggleAccountStatus = (accountId) => {
-    setAccounts(accounts.map(account => 
-      account.id === accountId ? { ...account, isActive: !account.isActive } : account
-    ));
-  };
-
-  const getAccountTypeOptions = () => [
-    { value: 'Assets', label: 'Assets' },
-    { value: 'Liabilities', label: 'Liabilities' },
-    { value: 'Equity', label: 'Equity' },
-    { value: 'Revenue', label: 'Revenue' },
-    { value: 'Expenses', label: 'Expenses' }
-  ];
-
-  const getAccountCategoryOptions = (accountType) => {
-    switch (accountType) {
-      case 'Assets':
-        return ['Current Assets', 'Fixed Assets', 'Intangible Assets', 'Other Assets'];
-      case 'Liabilities':
-        return ['Current Liabilities', 'Long-term Liabilities', 'Other Liabilities'];
-      case 'Equity':
-        return ['Capital', 'Retained Earnings', 'Other Equity'];
-      case 'Revenue':
-        return ['Operating Revenue', 'Non-operating Revenue', 'Other Revenue'];
-      case 'Expenses':
-        return ['Operating Expenses', 'Non-operating Expenses', 'Other Expenses'];
-      default:
-        return [];
+  const handleDeleteAccount = async (accountId) => {
+    if (!confirm('Hapus account ini?')) return;
+    try {
+      const response = await fetch(`${API_URL}/chart-of-accounts/${accountId}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      setAccounts(prev => prev.filter(a => a.id !== accountId));
+    } catch (err) {
+      console.error('Error deleting account:', err);
+      alert(`Error: ${err.message}`);
     }
   };
+
+  const getAccountTypeColor = (type) => {
+    switch (type) {
+      case 'Asset': return 'bg-green-100 text-green-800';
+      case 'Liability': return 'bg-red-100 text-red-800';
+      case 'Equity': return 'bg-blue-100 text-blue-800';
+      case 'Revenue': return 'bg-purple-100 text-purple-800';
+      case 'Expense': return 'bg-orange-100 text-orange-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getBalanceColor = (type, balance) => {
+    if (type === 'Asset' || type === 'Expense') {
+      return balance >= 0 ? 'text-green-600' : 'text-red-600';
+    } else {
+      return balance >= 0 ? 'text-blue-600' : 'text-red-600';
+    }
+  };
+
+  const filteredAccounts = accounts.filter(account =>
+    (account.account_code || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (account.account_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (account.account_type || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  if (loading) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Memuat data chart of accounts...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -384,7 +272,12 @@ const ChartOfAccounts = () => {
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 mb-2">Chart of Accounts</h1>
-          <p className="text-gray-600">Kelola chart of accounts dan struktur akuntansi</p>
+          <p className="text-gray-600">
+            Kelola struktur akun akuntansi
+            {error && (
+              <span className="ml-2 text-orange-600 text-sm">(Menggunakan data offline)</span>
+            )}
+          </p>
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
@@ -395,115 +288,81 @@ const ChartOfAccounts = () => {
           </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>
-                {editingAccount ? 'Edit Account' : 'Tambah Account Baru'}
-              </DialogTitle>
+              <DialogTitle>{editingAccount ? 'Edit Account' : 'Tambah Account Baru'}</DialogTitle>
               <DialogDescription>
-                {editingAccount ? 'Update informasi account' : 'Masukkan informasi account baru'}
+                {editingAccount ? 'Update informasi account' : 'Buat account baru untuk chart of accounts'}
               </DialogDescription>
             </DialogHeader>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="accountCode">Account Code *</Label>
+                <Label htmlFor="account_code">Account Code</Label>
                 <Input
-                  id="accountCode"
-                  value={newAccount.accountCode}
-                  onChange={(e) => setNewAccount({...newAccount, accountCode: e.target.value})}
-                  placeholder="e.g., 1000"
+                  id="account_code"
+                  value={newAccount.account_code}
+                  onChange={(e) => setNewAccount({...newAccount, account_code: e.target.value})}
+                  placeholder="Account code"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="accountName">Account Name *</Label>
+                <Label htmlFor="account_name">Account Name</Label>
                 <Input
-                  id="accountName"
-                  value={newAccount.accountName}
-                  onChange={(e) => setNewAccount({...newAccount, accountName: e.target.value})}
-                  placeholder="Nama account"
+                  id="account_name"
+                  value={newAccount.account_name}
+                  onChange={(e) => setNewAccount({...newAccount, account_name: e.target.value})}
+                  placeholder="Account name"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="accountType">Account Type *</Label>
-                <select
-                  id="accountType"
-                  value={newAccount.accountType}
-                  onChange={(e) => setNewAccount({...newAccount, accountType: e.target.value, accountCategory: ''})}
-                  className="w-full p-2 border rounded-md"
-                >
-                  {getAccountTypeOptions().map(option => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
+                <Label htmlFor="account_type">Account Type</Label>
+                <Select value={newAccount.account_type} onValueChange={(value) => setNewAccount({...newAccount, account_type: value})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih account type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Asset">Asset</SelectItem>
+                    <SelectItem value="Liability">Liability</SelectItem>
+                    <SelectItem value="Equity">Equity</SelectItem>
+                    <SelectItem value="Revenue">Revenue</SelectItem>
+                    <SelectItem value="Expense">Expense</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="accountCategory">Account Category *</Label>
-                <select
-                  id="accountCategory"
-                  value={newAccount.accountCategory}
-                  onChange={(e) => setNewAccount({...newAccount, accountCategory: e.target.value})}
-                  className="w-full p-2 border rounded-md"
-                >
-                  <option value="">Pilih Category</option>
-                  {getAccountCategoryOptions(newAccount.accountType).map(category => (
-                    <option key={category} value={category}>{category}</option>
-                  ))}
-                </select>
+                <Label htmlFor="parent_account">Parent Account</Label>
+                <Input
+                  id="parent_account"
+                  value={newAccount.parent_account}
+                  onChange={(e) => setNewAccount({...newAccount, parent_account: e.target.value})}
+                  placeholder="Parent account (optional)"
+                />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="parentAccount">Parent Account</Label>
-                <select
-                  id="parentAccount"
-                  value={newAccount.parentAccount}
-                  onChange={(e) => setNewAccount({...newAccount, parentAccount: e.target.value})}
-                  className="w-full p-2 border rounded-md"
-                >
-                  <option value="">No Parent Account</option>
-                  {accounts.filter(acc => acc.accountType === newAccount.accountType && acc.isActive).map(account => (
-                    <option key={account.id} value={account.accountCode}>{account.accountCode} - {account.accountName}</option>
-                  ))}
-                </select>
+                <Label htmlFor="normal_balance">Normal Balance</Label>
+                <Select value={newAccount.normal_balance} onValueChange={(value) => setNewAccount({...newAccount, normal_balance: value})}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih normal balance" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Debit">Debit</SelectItem>
+                    <SelectItem value="Credit">Credit</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="normalBalance">Normal Balance *</Label>
-                <select
-                  id="normalBalance"
-                  value={newAccount.normalBalance}
-                  onChange={(e) => setNewAccount({...newAccount, normalBalance: e.target.value})}
-                  className="w-full p-2 border rounded-md"
-                >
-                  <option value="Debit">Debit</option>
-                  <option value="Credit">Credit</option>
-                </select>
-              </div>
-              <div className="space-y-2 md:col-span-2">
+              <div className="col-span-2 space-y-2">
                 <Label htmlFor="description">Description</Label>
                 <Input
                   id="description"
                   value={newAccount.description}
                   onChange={(e) => setNewAccount({...newAccount, description: e.target.value})}
-                  placeholder="Deskripsi account"
+                  placeholder="Account description"
                 />
-              </div>
-              <div className="space-y-2 md:col-span-2">
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="isActive"
-                    checked={newAccount.isActive}
-                    onChange={(e) => setNewAccount({...newAccount, isActive: e.target.checked})}
-                    className="rounded"
-                  />
-                  <Label htmlFor="isActive">Active Account</Label>
-                </div>
               </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                Cancel
+                Batal
               </Button>
-              <Button 
-                onClick={editingAccount ? handleUpdateAccount : handleAddAccount}
-                className="bg-red-500 hover:bg-red-600 text-white"
-              >
+              <Button onClick={editingAccount ? handleUpdateAccount : handleAddAccount} className="bg-red-500 hover:bg-red-600 text-white">
                 {editingAccount ? 'Update Account' : 'Tambah Account'}
               </Button>
             </DialogFooter>
@@ -516,26 +375,13 @@ const ChartOfAccounts = () => {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <BookOpen className="h-6 w-6 text-blue-600" />
-              </div>
-              <div>
-                <div className="text-sm text-gray-600">Total Accounts</div>
-                <div className="text-2xl font-bold text-gray-800">{accounts.length}</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <TrendingUp className="h-6 w-6 text-blue-600" />
+              <div className="p-3 bg-green-100 rounded-lg">
+                <TrendingUp className="h-6 w-6 text-green-600" />
               </div>
               <div>
                 <div className="text-sm text-gray-600">Assets</div>
-                <div className="text-2xl font-bold text-blue-600">
-                  {accounts.filter(a => a.accountType === 'Assets').length}
+                <div className="text-2xl font-bold text-green-600">
+                  {accounts.filter(a => a.account_type === 'Asset').length}
                 </div>
               </div>
             </div>
@@ -550,7 +396,7 @@ const ChartOfAccounts = () => {
               <div>
                 <div className="text-sm text-gray-600">Liabilities</div>
                 <div className="text-2xl font-bold text-red-600">
-                  {accounts.filter(a => a.accountType === 'Liabilities').length}
+                  {accounts.filter(a => a.account_type === 'Liability').length}
                 </div>
               </div>
             </div>
@@ -559,13 +405,13 @@ const ChartOfAccounts = () => {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-green-100 rounded-lg">
-                <DollarSign className="h-6 w-6 text-green-600" />
+              <div className="p-3 bg-blue-100 rounded-lg">
+                <DollarSign className="h-6 w-6 text-blue-600" />
               </div>
               <div>
                 <div className="text-sm text-gray-600">Equity</div>
-                <div className="text-2xl font-bold text-green-600">
-                  {accounts.filter(a => a.accountType === 'Equity').length}
+                <div className="text-2xl font-bold text-blue-600">
+                  {accounts.filter(a => a.account_type === 'Equity').length}
                 </div>
               </div>
             </div>
@@ -575,12 +421,27 @@ const ChartOfAccounts = () => {
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="p-3 bg-purple-100 rounded-lg">
-                <Calculator className="h-6 w-6 text-purple-600" />
+                <TrendingUp className="h-6 w-6 text-purple-600" />
               </div>
               <div>
                 <div className="text-sm text-gray-600">Revenue</div>
                 <div className="text-2xl font-bold text-purple-600">
-                  {accounts.filter(a => a.accountType === 'Revenue').length}
+                  {accounts.filter(a => a.account_type === 'Revenue').length}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-orange-100 rounded-lg">
+                <TrendingDown className="h-6 w-6 text-orange-600" />
+              </div>
+              <div>
+                <div className="text-sm text-gray-600">Expenses</div>
+                <div className="text-2xl font-bold text-orange-600">
+                  {accounts.filter(a => a.account_type === 'Expense').length}
                 </div>
               </div>
             </div>
@@ -603,19 +464,11 @@ const ChartOfAccounts = () => {
         </CardContent>
       </Card>
 
-      {/* Tabs */}
-      <Tabs defaultValue="accounts" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="accounts">Chart of Accounts</TabsTrigger>
-          <TabsTrigger value="bank-reconciliation">Bank Reconciliation</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="accounts" className="space-y-6">
-          {/* Accounts Table */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Chart of Accounts</CardTitle>
-            </CardHeader>
+      {/* Accounts Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Chart of Accounts</CardTitle>
+        </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
@@ -623,10 +476,9 @@ const ChartOfAccounts = () => {
                 <TableHead>Account Code</TableHead>
                 <TableHead>Account Name</TableHead>
                 <TableHead>Type</TableHead>
-                <TableHead>Category</TableHead>
+                <TableHead>Parent Account</TableHead>
                 <TableHead>Normal Balance</TableHead>
                 <TableHead>Current Balance</TableHead>
-                <TableHead>Parent Account</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -634,51 +486,24 @@ const ChartOfAccounts = () => {
             <TableBody>
               {filteredAccounts.map((account) => (
                 <TableRow key={account.id} className="hover:bg-gray-50">
-                  <TableCell className="font-medium">{account.accountCode}</TableCell>
+                  <TableCell className="font-medium">{account.account_code}</TableCell>
+                  <TableCell>{account.account_name}</TableCell>
                   <TableCell>
-                    <div>
-                      <div className="font-medium">{account.accountName}</div>
-                      {account.description && (
-                        <div className="text-sm text-gray-500">{account.description}</div>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={getAccountTypeColor(account.accountType)}>
-                      {account.accountType}
+                    <Badge className={getAccountTypeColor(account.account_type)}>
+                      {account.account_type}
                     </Badge>
                   </TableCell>
-                  <TableCell>{account.accountCategory}</TableCell>
+                  <TableCell>{account.parent_account || '-'}</TableCell>
                   <TableCell>
-                    <span className={getNormalBalanceColor(account.normalBalance)}>
-                      {account.normalBalance}
-                    </span>
+                    <Badge variant="outline">{account.normal_balance}</Badge>
+                  </TableCell>
+                  <TableCell className={`font-semibold ${getBalanceColor(account.account_type, account.balance)}`}>
+                    Rp {(account.balance || 0).toLocaleString()}
                   </TableCell>
                   <TableCell>
-                    <div className={getBalanceColor(account.balance, account.normalBalance)}>
-                      Rp {Math.abs(account.balance).toLocaleString()}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {account.parentAccount ? (
-                      <span className="text-sm text-blue-600">{account.parentAccount}</span>
-                    ) : (
-                      <span className="text-sm text-gray-500">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Badge className={account.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
-                        {account.isActive ? 'Active' : 'Inactive'}
-                      </Badge>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => toggleAccountStatus(account.id)}
-                      >
-                        {account.isActive ? 'Deactivate' : 'Activate'}
-                      </Button>
-                    </div>
+                    <Badge className={account.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                      {account.status}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
@@ -704,178 +529,8 @@ const ChartOfAccounts = () => {
           </Table>
         </CardContent>
       </Card>
-        </TabsContent>
-
-        <TabsContent value="bank-reconciliation" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <CardTitle>Bank Reconciliation</CardTitle>
-                <Dialog open={isBankReconciliationOpen} onOpenChange={setIsBankReconciliationOpen}>
-                  <DialogTrigger asChild>
-                    <Button className="bg-red-500 hover:bg-red-600 text-white">
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Start Reconciliation
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-2xl">
-                    <DialogHeader>
-                      <DialogTitle>Bank Reconciliation</DialogTitle>
-                      <DialogDescription>
-                        Reconcile bank statement with book balance.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="bankAccount">Bank Account</Label>
-                        <select
-                          id="bankAccount"
-                          value={bankReconciliation.bankAccount}
-                          onChange={(e) => setBankReconciliation({...bankReconciliation, bankAccount: e.target.value})}
-                          className="w-full p-2 border rounded-md"
-                        >
-                          <option value="">Select Bank Account</option>
-                          {bankAccounts.map((account) => (
-                            <option key={account.id} value={account.id}>
-                              {account.name} - {account.accountNumber}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="statementDate">Statement Date</Label>
-                        <Input
-                          id="statementDate"
-                          type="date"
-                          value={bankReconciliation.statementDate}
-                          onChange={(e) => setBankReconciliation({...bankReconciliation, statementDate: e.target.value})}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="statementBalance">Statement Balance</Label>
-                        <Input
-                          id="statementBalance"
-                          type="number"
-                          value={bankReconciliation.statementBalance}
-                          onChange={(e) => setBankReconciliation({...bankReconciliation, statementBalance: e.target.value})}
-                          placeholder="Enter statement balance"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="bookBalance">Book Balance</Label>
-                        <Input
-                          id="bookBalance"
-                          type="number"
-                          value={bankReconciliation.bookBalance}
-                          onChange={(e) => setBankReconciliation({...bankReconciliation, bookBalance: e.target.value})}
-                          placeholder="Enter book balance"
-                        />
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button variant="outline" onClick={() => setIsBankReconciliationOpen(false)}>
-                        Cancel
-                      </Button>
-                      <Button onClick={handleBankReconciliation} className="bg-red-500 hover:bg-red-600 text-white">
-                        Process Reconciliation
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                {/* Bank Transactions */}
-                <div>
-                  <h3 className="text-lg font-semibold mb-4">Bank Transactions</h3>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead>Debit</TableHead>
-                        <TableHead>Credit</TableHead>
-                        <TableHead>Balance</TableHead>
-                        <TableHead>Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {bankTransactions.map((transaction) => (
-                        <TableRow key={transaction.id}>
-                          <TableCell>{transaction.date}</TableCell>
-                          <TableCell>{transaction.description}</TableCell>
-                          <TableCell>{transaction.debit > 0 ? `Rp ${transaction.debit.toLocaleString('id-ID')}` : '-'}</TableCell>
-                          <TableCell>{transaction.credit > 0 ? `Rp ${transaction.credit.toLocaleString('id-ID')}` : '-'}</TableCell>
-                          <TableCell>Rp {transaction.balance.toLocaleString('id-ID')}</TableCell>
-                          <TableCell>
-                            <Badge className={transaction.status === 'Cleared' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}>
-                              {transaction.status}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-
-                {/* Reconciliation Summary */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="p-3 bg-blue-100 rounded-lg">
-                          <CheckCircle className="h-6 w-6 text-blue-600" />
-                        </div>
-                        <div>
-                          <div className="text-sm text-gray-600">Cleared Transactions</div>
-                          <div className="text-2xl font-bold text-blue-600">
-                            {bankTransactions.filter(t => t.status === 'Cleared').length}
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="p-3 bg-yellow-100 rounded-lg">
-                          <AlertCircle className="h-6 w-6 text-yellow-600" />
-                        </div>
-                        <div>
-                          <div className="text-sm text-gray-600">Outstanding Transactions</div>
-                          <div className="text-2xl font-bold text-yellow-600">
-                            {bankTransactions.filter(t => t.status === 'Outstanding').length}
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="p-3 bg-green-100 rounded-lg">
-                          <Calculator className="h-6 w-6 text-green-600" />
-                        </div>
-                        <div>
-                          <div className="text-sm text-gray-600">Reconciled Balance</div>
-                          <div className="text-2xl font-bold text-green-600">
-                            Rp {bankTransactions[bankTransactions.length - 1]?.balance.toLocaleString('id-ID') || '0'}
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
     </div>
   );
 };
 
 export default ChartOfAccounts;
-
-

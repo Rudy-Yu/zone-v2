@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Search, Edit, Trash2, Eye, Package, CheckCircle, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { 
   Table, 
   TableBody, 
@@ -28,88 +27,129 @@ const StockOpname = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingOpname, setEditingOpname] = useState(null);
-  
-  const [stockOpnames, setStockOpnames] = useState([
-    {
-      id: 'SO-001',
-      opnameNumber: 'SO-2024-001',
-      opnameDate: '2024-01-20',
-      warehouse: 'Main Warehouse',
-      status: 'Completed',
-      totalItems: 150,
-      itemsChecked: 150,
-      discrepancies: 5,
-      varianceValue: 2500000,
-      items: [
-        { productId: 'PRD-001', productName: 'Laptop Gaming', systemQty: 10, actualQty: 12, variance: 2, unitPrice: 15000000, varianceValue: 30000000 },
-        { productId: 'PRD-002', productName: 'Mouse Wireless', systemQty: 50, actualQty: 48, variance: -2, unitPrice: 250000, varianceValue: -500000 },
-        { productId: 'PRD-003', productName: 'Keyboard Mechanical', systemQty: 25, actualQty: 25, variance: 0, unitPrice: 1200000, varianceValue: 0 }
-      ],
-      conductedBy: 'John Inventory',
-      notes: 'Monthly stock opname completed',
-      createdAt: '2024-01-20 10:30:00',
-      completedDate: '2024-01-20 16:30:00'
-    },
-    {
-      id: 'SO-002',
-      opnameNumber: 'SO-2024-002',
-      opnameDate: '2024-01-19',
-      warehouse: 'Secondary Warehouse',
-      status: 'In Progress',
-      totalItems: 75,
-      itemsChecked: 45,
-      discrepancies: 2,
-      varianceValue: 800000,
-      items: [
-        { productId: 'PRD-004', productName: 'Monitor 27"', systemQty: 8, actualQty: 6, variance: -2, unitPrice: 2000000, varianceValue: -4000000 },
-        { productId: 'PRD-005', productName: 'Headset Gaming', systemQty: 15, actualQty: 17, variance: 2, unitPrice: 700000, varianceValue: 1400000 }
-      ],
-      conductedBy: 'Jane Inventory',
-      notes: 'Partial stock opname in progress',
-      createdAt: '2024-01-19 14:15:00'
-    },
-    {
-      id: 'SO-003',
-      opnameNumber: 'SO-2024-003',
-      opnameDate: '2024-01-18',
-      warehouse: 'Main Warehouse',
-      status: 'Draft',
-      totalItems: 200,
-      itemsChecked: 0,
-      discrepancies: 0,
-      varianceValue: 0,
-      items: [],
-      conductedBy: 'Bob Inventory',
-      notes: 'Scheduled for tomorrow',
-      createdAt: '2024-01-18 09:45:00'
-    },
-    {
-      id: 'SO-004',
-      opnameNumber: 'SO-2024-004',
-      opnameDate: '2024-01-17',
-      warehouse: 'Main Warehouse',
-      status: 'Completed',
-      totalItems: 100,
-      itemsChecked: 100,
-      discrepancies: 0,
-      varianceValue: 0,
-      items: [
-        { productId: 'PRD-001', productName: 'Laptop Gaming', systemQty: 5, actualQty: 5, variance: 0, unitPrice: 15000000, varianceValue: 0 },
-        { productId: 'PRD-002', productName: 'Mouse Wireless', systemQty: 30, actualQty: 30, variance: 0, unitPrice: 250000, varianceValue: 0 }
-      ],
-      conductedBy: 'Alice Inventory',
-      notes: 'Perfect match - no discrepancies',
-      createdAt: '2024-01-17 16:20:00',
-      completedDate: '2024-01-17 18:30:00'
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+  const API_URL = `${BACKEND_URL}/api`;
+
+  const [stockOpnames, setStockOpnames] = useState([]);
+
+  useEffect(() => {
+    fetchStockOpnames();
+  }, []);
+
+  const fetchStockOpnames = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_URL}/stock-opnames`);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      setStockOpnames(data);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching stock opnames:', err);
+      setError(err.message);
+      setStockOpnames([
+        {
+          id: 'SO-001',
+          opname_number: 'SO-2024-001',
+          opname_date: '2024-01-20',
+          warehouse: 'Main Warehouse',
+          status: 'Completed',
+          total_items: 150,
+          items_checked: 150,
+          discrepancies: 5,
+          variance_value: 2500000,
+          conducted_by: 'John Inventory',
+          notes: 'Monthly stock opname completed',
+          created_at: '2024-01-20 10:30:00'
+        }
+      ]);
+    } finally {
+      setLoading(false);
     }
-  ]);
+  };
 
   const [newOpname, setNewOpname] = useState({
-    opnameDate: new Date().toISOString().split('T')[0],
+    opname_date: new Date().toISOString().split('T')[0],
     warehouse: '',
-    items: [],
     notes: ''
   });
+
+  const handleAddOpname = async () => {
+    try {
+      const response = await fetch(`${API_URL}/stock-opnames`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...newOpname,
+          items: []
+        })
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const created = await response.json();
+      setStockOpnames(prev => [...prev, created]);
+      setNewOpname({
+        opname_date: new Date().toISOString().split('T')[0],
+        warehouse: '',
+        notes: ''
+      });
+      setIsAddDialogOpen(false);
+    } catch (err) {
+      console.error('Error creating stock opname:', err);
+      alert(`Error: ${err.message}`);
+    }
+  };
+
+  const handleEditOpname = (opname) => {
+    setEditingOpname(opname);
+    setNewOpname({
+      opname_date: opname.opname_date,
+      warehouse: opname.warehouse,
+      notes: opname.notes || ''
+    });
+    setIsAddDialogOpen(true);
+  };
+
+  const handleUpdateOpname = async () => {
+    if (!editingOpname) return;
+    try {
+      const response = await fetch(`${API_URL}/stock-opnames/${editingOpname.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...newOpname,
+          items: editingOpname.items || []
+        })
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const updated = await response.json();
+      setStockOpnames(prev => prev.map(o => o.id === editingOpname.id ? updated : o));
+      setEditingOpname(null);
+      setNewOpname({
+        opname_date: new Date().toISOString().split('T')[0],
+        warehouse: '',
+        notes: ''
+      });
+      setIsAddDialogOpen(false);
+    } catch (err) {
+      console.error('Error updating stock opname:', err);
+      alert(`Error: ${err.message}`);
+    }
+  };
+
+  const handleDeleteOpname = async (opnameId) => {
+    if (!confirm('Hapus stock opname ini?')) return;
+    try {
+      const response = await fetch(`${API_URL}/stock-opnames/${opnameId}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      setStockOpnames(prev => prev.filter(o => o.id !== opnameId));
+    } catch (err) {
+      console.error('Error deleting stock opname:', err);
+      alert(`Error: ${err.message}`);
+    }
+  };
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -121,103 +161,37 @@ const StockOpname = () => {
     }
   };
 
-  const getVarianceColor = (variance) => {
-    if (variance > 0) return 'text-green-600';
-    if (variance < 0) return 'text-red-600';
-    return 'text-gray-600';
-  };
-
-  const getVarianceIcon = (variance) => {
-    if (variance > 0) return <TrendingUp className="h-4 w-4 text-green-600" />;
-    if (variance < 0) return <TrendingDown className="h-4 w-4 text-red-600" />;
-    return <CheckCircle className="h-4 w-4 text-gray-600" />;
-  };
-
   const filteredOpnames = stockOpnames.filter(opname =>
-    opname.opnameNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    opname.warehouse.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    opname.status.toLowerCase().includes(searchTerm.toLowerCase())
+    (opname.opname_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (opname.warehouse || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (opname.status || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleAddOpname = () => {
-    const opname = {
-      id: `SO-${String(stockOpnames.length + 1).padStart(3, '0')}`,
-      opnameNumber: `SO-2024-${String(stockOpnames.length + 1).padStart(3, '0')}`,
-      ...newOpname,
-      status: 'Draft',
-      totalItems: newOpname.items.length,
-      itemsChecked: 0,
-      discrepancies: 0,
-      varianceValue: newOpname.items.reduce((sum, item) => sum + item.varianceValue, 0),
-      conductedBy: 'Current User',
-      createdAt: new Date().toISOString()
-    };
-    
-    setStockOpnames([...stockOpnames, opname]);
-    setNewOpname({
-      opnameDate: new Date().toISOString().split('T')[0],
-      warehouse: '',
-      items: [],
-      notes: ''
-    });
-    setIsAddDialogOpen(false);
-  };
-
-  const handleEditOpname = (opname) => {
-    setEditingOpname(opname);
-    setNewOpname(opname);
-    setIsAddDialogOpen(true);
-  };
-
-  const handleUpdateOpname = () => {
-    setStockOpnames(stockOpnames.map(opname => 
-      opname.id === editingOpname.id ? { 
-        ...opname, 
-        ...newOpname, 
-        totalItems: newOpname.items.length,
-        varianceValue: newOpname.items.reduce((sum, item) => sum + item.varianceValue, 0)
-      } : opname
-    ));
-    setEditingOpname(null);
-    setIsAddDialogOpen(false);
-  };
-
-  const handleDeleteOpname = (opnameId) => {
-    if (confirm('Apakah Anda yakin ingin menghapus stock opname ini?')) {
-      setStockOpnames(stockOpnames.filter(opname => opname.id !== opnameId));
-    }
-  };
-
-  const updateOpnameStatus = (opnameId, newStatus) => {
-    const updatedOpnames = stockOpnames.map(opname => {
-      if (opname.id === opnameId) {
-        const updated = { ...opname, status: newStatus };
-        if (newStatus === 'Completed') {
-          updated.completedDate = new Date().toISOString();
-          updated.itemsChecked = opname.totalItems;
-        }
-        return updated;
-      }
-      return opname;
-    });
-    setStockOpnames(updatedOpnames);
-  };
-
-  const startOpname = (opnameId) => {
-    updateOpnameStatus(opnameId, 'In Progress');
-  };
-
-  const completeOpname = (opnameId) => {
-    updateOpnameStatus(opnameId, 'Completed');
-  };
+  if (loading) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Memuat data stock opname...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">Stock Opname Management</h1>
-          <p className="text-gray-600">Kelola stock opname dan tracking perbedaan stok</p>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">Stock Opname</h1>
+          <p className="text-gray-600">
+            Kelola stock opname dan audit inventori
+            {error && (
+              <span className="ml-2 text-orange-600 text-sm">(Menggunakan data offline)</span>
+            )}
+          </p>
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
@@ -226,41 +200,33 @@ const StockOpname = () => {
               Buat Stock Opname
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-4xl">
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>
-                {editingOpname ? 'Edit Stock Opname' : 'Buat Stock Opname Baru'}
-              </DialogTitle>
+              <DialogTitle>{editingOpname ? 'Edit Stock Opname' : 'Buat Stock Opname Baru'}</DialogTitle>
               <DialogDescription>
-                {editingOpname ? 'Update informasi stock opname' : 'Masukkan informasi stock opname baru'}
+                {editingOpname ? 'Update informasi stock opname' : 'Buat stock opname baru untuk audit inventori'}
               </DialogDescription>
             </DialogHeader>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="opnameDate">Tanggal Opname *</Label>
+                <Label htmlFor="opname_date">Tanggal Opname</Label>
                 <Input
-                  id="opnameDate"
+                  id="opname_date"
                   type="date"
-                  value={newOpname.opnameDate}
-                  onChange={(e) => setNewOpname({...newOpname, opnameDate: e.target.value})}
+                  value={newOpname.opname_date}
+                  onChange={(e) => setNewOpname({...newOpname, opname_date: e.target.value})}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="warehouse">Warehouse *</Label>
-                <select
+                <Label htmlFor="warehouse">Gudang</Label>
+                <Input
                   id="warehouse"
                   value={newOpname.warehouse}
                   onChange={(e) => setNewOpname({...newOpname, warehouse: e.target.value})}
-                  className="w-full p-2 border rounded-md"
-                >
-                  <option value="">Pilih Warehouse</option>
-                  <option value="Main Warehouse">Main Warehouse</option>
-                  <option value="Secondary Warehouse">Secondary Warehouse</option>
-                  <option value="Distribution Center">Distribution Center</option>
-                  <option value="Retail Store">Retail Store</option>
-                </select>
+                  placeholder="Nama gudang"
+                />
               </div>
-              <div className="space-y-2 md:col-span-2">
+              <div className="col-span-2 space-y-2">
                 <Label htmlFor="notes">Catatan</Label>
                 <Input
                   id="notes"
@@ -270,46 +236,11 @@ const StockOpname = () => {
                 />
               </div>
             </div>
-            
-            {/* Opname Items */}
-            <div className="mt-6">
-              <Label>Item Opname</Label>
-              <div className="border rounded-lg p-4 mt-2">
-                <div className="text-sm text-gray-600 mb-4">Items akan ditambahkan melalui form terpisah</div>
-                {newOpname.items.length > 0 ? (
-                  <div className="space-y-2">
-                    {newOpname.items.map((item, index) => (
-                      <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                        <span>{item.productName}</span>
-                        <div className="flex items-center gap-2">
-                          <span>System: {item.systemQty}</span>
-                          <span>Actual: {item.actualQty}</span>
-                          <span className={getVarianceColor(item.variance)}>
-                            Variance: {item.variance > 0 ? '+' : ''}{item.variance}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                    <div className="font-bold text-right">
-                      Total Variance Value: Rp {newOpname.items.reduce((sum, item) => sum + item.varianceValue, 0).toLocaleString()}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-4 text-gray-500">
-                    Belum ada item dalam opname ini
-                  </div>
-                )}
-              </div>
-            </div>
-            
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                Cancel
+                Batal
               </Button>
-              <Button 
-                onClick={editingOpname ? handleUpdateOpname : handleAddOpname}
-                className="bg-red-500 hover:bg-red-600 text-white"
-              >
+              <Button onClick={editingOpname ? handleUpdateOpname : handleAddOpname} className="bg-red-500 hover:bg-red-600 text-white">
                 {editingOpname ? 'Update Opname' : 'Buat Opname'}
               </Button>
             </DialogFooter>
@@ -326,23 +257,8 @@ const StockOpname = () => {
                 <Package className="h-6 w-6 text-blue-600" />
               </div>
               <div>
-                <div className="text-sm text-gray-600">Total Opnames</div>
+                <div className="text-sm text-gray-600">Total Opname</div>
                 <div className="text-2xl font-bold text-gray-800">{stockOpnames.length}</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <AlertTriangle className="h-6 w-6 text-blue-600" />
-              </div>
-              <div>
-                <div className="text-sm text-gray-600">In Progress</div>
-                <div className="text-2xl font-bold text-blue-600">
-                  {stockOpnames.filter(o => o.status === 'In Progress').length}
-                </div>
               </div>
             </div>
           </CardContent>
@@ -365,13 +281,28 @@ const StockOpname = () => {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
+              <div className="p-3 bg-yellow-100 rounded-lg">
+                <AlertTriangle className="h-6 w-6 text-yellow-600" />
+              </div>
+              <div>
+                <div className="text-sm text-gray-600">In Progress</div>
+                <div className="text-2xl font-bold text-yellow-600">
+                  {stockOpnames.filter(o => o.status === 'In Progress').length}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
               <div className="p-3 bg-red-100 rounded-lg">
-                <TrendingUp className="h-6 w-6 text-red-600" />
+                <TrendingDown className="h-6 w-6 text-red-600" />
               </div>
               <div>
                 <div className="text-sm text-gray-600">Total Discrepancies</div>
                 <div className="text-2xl font-bold text-red-600">
-                  {stockOpnames.reduce((sum, o) => sum + o.discrepancies, 0)}
+                  {stockOpnames.reduce((sum, o) => sum + (o.discrepancies || 0), 0)}
                 </div>
               </div>
             </div>
@@ -404,10 +335,10 @@ const StockOpname = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>Opname Number</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Warehouse</TableHead>
+                <TableHead>Tanggal</TableHead>
+                <TableHead>Gudang</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Items</TableHead>
+                <TableHead>Total Items</TableHead>
                 <TableHead>Discrepancies</TableHead>
                 <TableHead>Variance Value</TableHead>
                 <TableHead>Conducted By</TableHead>
@@ -417,54 +348,24 @@ const StockOpname = () => {
             <TableBody>
               {filteredOpnames.map((opname) => (
                 <TableRow key={opname.id} className="hover:bg-gray-50">
-                  <TableCell className="font-medium">{opname.opnameNumber}</TableCell>
-                  <TableCell>{opname.opnameDate}</TableCell>
+                  <TableCell className="font-medium">{opname.opname_number}</TableCell>
+                  <TableCell>{opname.opname_date}</TableCell>
                   <TableCell>{opname.warehouse}</TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Badge className={getStatusColor(opname.status)}>
-                        {opname.status}
-                      </Badge>
-                      {opname.status === 'Draft' && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => startOpname(opname.id)}
-                        >
-                          Start
-                        </Button>
-                      )}
-                      {opname.status === 'In Progress' && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => completeOpname(opname.id)}
-                        >
-                          Complete
-                        </Button>
-                      )}
-                    </div>
+                    <Badge className={getStatusColor(opname.status)}>
+                      {opname.status}
+                    </Badge>
                   </TableCell>
+                  <TableCell>{opname.total_items}</TableCell>
                   <TableCell>
-                    <div className="text-sm">
-                      <div>Total: {opname.totalItems}</div>
-                      <div>Checked: {opname.itemsChecked}</div>
-                    </div>
+                    <span className={opname.discrepancies > 0 ? 'text-red-600 font-semibold' : 'text-green-600'}>
+                      {opname.discrepancies}
+                    </span>
                   </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      {getVarianceIcon(opname.discrepancies)}
-                      <span className={getVarianceColor(opname.discrepancies)}>
-                        {opname.discrepancies}
-                      </span>
-                    </div>
+                  <TableCell className="font-semibold">
+                    Rp {(opname.variance_value || 0).toLocaleString()}
                   </TableCell>
-                  <TableCell>
-                    <div className={getVarianceColor(opname.varianceValue)}>
-                      Rp {Math.abs(opname.varianceValue).toLocaleString()}
-                    </div>
-                  </TableCell>
-                  <TableCell>{opname.conductedBy}</TableCell>
+                  <TableCell>{opname.conducted_by}</TableCell>
                   <TableCell>
                     <div className="flex gap-1">
                       <Button variant="ghost" size="sm">
@@ -494,7 +395,3 @@ const StockOpname = () => {
 };
 
 export default StockOpname;
-
-
-
-

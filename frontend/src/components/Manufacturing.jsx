@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import { Factory, Wrench, Clock, Package2, TrendingUp, AlertTriangle, Plus, Edit, Trash2, Eye } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Search, Edit, Trash2, Eye, Factory, Calendar, Package, Users, Clock, CheckCircle, Settings } from 'lucide-react';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { Button } from './ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { 
   Table, 
   TableBody, 
@@ -22,379 +22,141 @@ import {
   DialogTrigger,
 } from './ui/dialog';
 import { Label } from './ui/label';
-import { Input } from './ui/input';
-import { Textarea } from './ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 
 const Manufacturing = () => {
-  const [activeTab, setActiveTab] = useState('production');
-  const [isCreateOrderOpen, setIsCreateOrderOpen] = useState(false);
-  const [isQualityControlOpen, setIsQualityControlOpen] = useState(false);
-  const [productionOrders, setProductionOrders] = useState([
-    {
-      id: 'PO-001',
-      product: 'Laptop Gaming ROG',
-      quantity: 50,
-      started: '2024-01-15',
-      estimated: '2024-01-25',
-      status: 'In Progress',
-      completion: 75
-    },
-    {
-      id: 'PO-002', 
-      product: 'Smartphone Pro Max',
-      quantity: 100,
-      started: '2024-01-18',
-      estimated: '2024-01-28',
-      status: 'Planning',
-      completion: 0
-    },
-    {
-      id: 'PO-003',
-      product: 'Tablet Ultra',
-      quantity: 25,
-      started: '2024-01-10',
-      estimated: '2024-01-20',
-      status: 'Completed',
-      completion: 100
-    }
-  ]);
+  const [activeTab, setActiveTab] = useState('overview');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const [newProductionOrder, setNewProductionOrder] = useState({
-    product: '',
-    quantity: '',
-    startDate: '',
-    endDate: '',
-    workstation: '',
-    worker: '',
-    priority: 'Normal',
-    notes: ''
+  const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+  const API_URL = `${BACKEND_URL}/api`;
+
+  const [manufacturingData, setManufacturingData] = useState({
+    overview: {
+      totalOrders: 0,
+      completedOrders: 0,
+      inProgressOrders: 0,
+      efficiency: 0,
+      totalWorkstations: 0,
+      activeWorkstations: 0
+    },
+    workstations: [],
+    schedules: [],
+    quality: {
+      totalInspections: 0,
+      passedInspections: 0,
+      failedInspections: 0,
+      qualityRate: 0
+    }
   });
 
-  const [qualityControl, setQualityControl] = useState({
-    orderId: '',
-    inspector: '',
-    checkDate: '',
-    result: 'Pass',
-    notes: ''
-  });
+  useEffect(() => {
+    fetchManufacturingData();
+  }, []);
 
-  const products = [
-    'Laptop Gaming ROG',
-    'Smartphone Pro Max',
-    'Tablet Ultra',
-    'Desktop Workstation',
-    'Gaming Monitor'
-  ];
-
-  const workers = [
-    'John Worker',
-    'Jane Smith',
-    'Mike Johnson',
-    'Sarah Wilson',
-    'David Brown'
-  ];
-
-  const handleCreateProductionOrder = () => {
-    const order = {
-      id: `PO-${String(productionOrders.length + 1).padStart(3, '0')}`,
-      ...newProductionOrder,
-      quantity: parseInt(newProductionOrder.quantity),
-      status: 'Planning',
-      completion: 0
-    };
-    
-    setProductionOrders([...productionOrders, order]);
-    setNewProductionOrder({
-      product: '',
-      quantity: '',
-      startDate: '',
-      endDate: '',
-      workstation: '',
-      worker: '',
-      priority: 'Normal',
-      notes: ''
-    });
-    setIsCreateOrderOpen(false);
-  };
-
-  const handleQualityControl = () => {
-    // Update production order with quality control result
-    setProductionOrders(productionOrders.map(order => 
-      order.id === qualityControl.orderId 
-        ? { ...order, qualityCheck: qualityControl.result, qualityDate: qualityControl.checkDate }
-        : order
-    ));
-    setQualityControl({
-      orderId: '',
-      inspector: '',
-      checkDate: '',
-      result: 'Pass',
-      notes: ''
-    });
-    setIsQualityControlOpen(false);
-  };
-
-  const bomItems = [
-    {
-      id: 'BOM-001',
-      product: 'Laptop Gaming ROG',
-      materials: [
-        { name: 'Motherboard Gaming', qty: 1, unit: 'pcs', cost: 'Rp 3.500.000' },
-        { name: 'RAM DDR5 16GB', qty: 2, unit: 'pcs', cost: 'Rp 2.000.000' },
-        { name: 'SSD NVMe 1TB', qty: 1, unit: 'pcs', cost: 'Rp 1.500.000' },
-        { name: 'Casing Aluminum', qty: 1, unit: 'pcs', cost: 'Rp 800.000' }
-      ],
-      totalCost: 'Rp 7.800.000'
-    }
-  ];
-
-  const workstations = [
-    { id: 'WS-001', name: 'Assembly Line 1', status: 'Active', efficiency: 92, currentJob: 'PO-001' },
-    { id: 'WS-002', name: 'Quality Control', status: 'Active', efficiency: 88, currentJob: 'PO-001' },
-    { id: 'WS-003', name: 'Packaging Line', status: 'Maintenance', efficiency: 0, currentJob: null },
-    { id: 'WS-004', name: 'Testing Station', status: 'Active', efficiency: 95, currentJob: 'PO-003' }
-  ];
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'Completed': return 'bg-green-100 text-green-800';
-      case 'In Progress': return 'bg-blue-100 text-blue-800';
-      case 'Planning': return 'bg-yellow-100 text-yellow-800';
-      case 'On Hold': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+  const fetchManufacturingData = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_URL}/manufacturing`);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      setManufacturingData(data);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching manufacturing data:', err);
+      setError(err.message);
+      setManufacturingData({
+        overview: {
+          totalOrders: 45,
+          completedOrders: 32,
+          inProgressOrders: 13,
+          efficiency: 85.2,
+          totalWorkstations: 8,
+          activeWorkstations: 6
+        },
+        workstations: [
+          {
+            id: 'WS-001',
+            name: 'Assembly Line A',
+            status: 'Active',
+            currentOrder: 'PO-2024-001',
+            efficiency: 90.5,
+            workers: 5,
+            capacity: 100
+          },
+          {
+            id: 'WS-002',
+            name: 'Assembly Line B',
+            status: 'Active',
+            currentOrder: 'PO-2024-002',
+            efficiency: 82.3,
+            workers: 4,
+            capacity: 80
+          }
+        ],
+        schedules: [
+          {
+            id: 'SCH-001',
+            workstation: 'Assembly Line A',
+            order: 'PO-2024-001',
+            startTime: '08:00',
+            endTime: '16:00',
+            status: 'In Progress'
+          }
+        ],
+        quality: {
+          totalInspections: 150,
+          passedInspections: 142,
+          failedInspections: 8,
+          qualityRate: 94.7
+        }
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const getWorkstationColor = (status) => {
-    switch (status) {
-      case 'Active': return 'bg-green-100 text-green-800';
-      case 'Maintenance': return 'bg-red-100 text-red-800';
-      case 'Idle': return 'bg-yellow-100 text-yellow-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
+  if (loading) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Memuat data manufacturing...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">Manufaktur</h1>
-          <p className="text-gray-600">Kelola produksi dan operasi manufaktur</p>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">Manufacturing</h1>
+          <p className="text-gray-600">
+            Kelola produksi dan manufacturing
+            {error && (
+              <span className="ml-2 text-orange-600 text-sm">(Menggunakan data offline)</span>
+            )}
+          </p>
         </div>
         <div className="flex gap-2">
-          <Dialog open={isCreateOrderOpen} onOpenChange={setIsCreateOrderOpen}>
-            <DialogTrigger asChild>
-        <Button className="bg-red-500 hover:bg-red-600 text-white">
-          <Factory className="h-4 w-4 mr-2" />
-          Buat Order Produksi
-        </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Buat Order Produksi Baru</DialogTitle>
-                <DialogDescription>
-                  Isi informasi untuk order produksi baru.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="product">Produk</Label>
-                  <Select value={newProductionOrder.product} onValueChange={(value) => setNewProductionOrder({...newProductionOrder, product: value})}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Pilih produk" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {products.map((product) => (
-                        <SelectItem key={product} value={product}>
-                          {product}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="quantity">Jumlah</Label>
-                  <Input
-                    id="quantity"
-                    type="number"
-                    value={newProductionOrder.quantity}
-                    onChange={(e) => setNewProductionOrder({...newProductionOrder, quantity: e.target.value})}
-                    placeholder="Masukkan jumlah"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="startDate">Tanggal Mulai</Label>
-                  <Input
-                    id="startDate"
-                    type="date"
-                    value={newProductionOrder.startDate}
-                    onChange={(e) => setNewProductionOrder({...newProductionOrder, startDate: e.target.value})}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="endDate">Tanggal Selesai</Label>
-                  <Input
-                    id="endDate"
-                    type="date"
-                    value={newProductionOrder.endDate}
-                    onChange={(e) => setNewProductionOrder({...newProductionOrder, endDate: e.target.value})}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="workstation">Workstation</Label>
-                  <Select value={newProductionOrder.workstation} onValueChange={(value) => setNewProductionOrder({...newProductionOrder, workstation: value})}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Pilih workstation" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {workstations.map((ws) => (
-                        <SelectItem key={ws.id} value={ws.name}>
-                          {ws.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="worker">Worker</Label>
-                  <Select value={newProductionOrder.worker} onValueChange={(value) => setNewProductionOrder({...newProductionOrder, worker: value})}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Pilih worker" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {workers.map((worker) => (
-                        <SelectItem key={worker} value={worker}>
-                          {worker}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="priority">Prioritas</Label>
-                  <Select value={newProductionOrder.priority} onValueChange={(value) => setNewProductionOrder({...newProductionOrder, priority: value})}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Pilih prioritas" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Low">Low</SelectItem>
-                      <SelectItem value="Normal">Normal</SelectItem>
-                      <SelectItem value="High">High</SelectItem>
-                      <SelectItem value="Urgent">Urgent</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="col-span-2 space-y-2">
-                  <Label htmlFor="notes">Catatan</Label>
-                  <Textarea
-                    id="notes"
-                    value={newProductionOrder.notes}
-                    onChange={(e) => setNewProductionOrder({...newProductionOrder, notes: e.target.value})}
-                    placeholder="Masukkan catatan"
-                    rows={3}
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsCreateOrderOpen(false)}>
-                  Batal
-                </Button>
-                <Button onClick={handleCreateProductionOrder} className="bg-red-500 hover:bg-red-600 text-white">
-                  Buat Order
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          <Dialog open={isQualityControlOpen} onOpenChange={setIsQualityControlOpen}>
-            <DialogTrigger asChild>
               <Button variant="outline">
-                <Wrench className="h-4 w-4 mr-2" />
-                Setup Quality Control
+            <Settings className="h-4 w-4 mr-2" />
+            Settings
               </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg">
-              <DialogHeader>
-                <DialogTitle>Setup Quality Control</DialogTitle>
-                <DialogDescription>
-                  Konfigurasi quality control untuk order produksi.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="orderId">Order Produksi</Label>
-                  <Select value={qualityControl.orderId} onValueChange={(value) => setQualityControl({...qualityControl, orderId: value})}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Pilih order produksi" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {productionOrders.map((order) => (
-                        <SelectItem key={order.id} value={order.id}>
-                          {order.id} - {order.product}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="inspector">Inspector</Label>
-                  <Input
-                    id="inspector"
-                    value={qualityControl.inspector}
-                    onChange={(e) => setQualityControl({...qualityControl, inspector: e.target.value})}
-                    placeholder="Masukkan nama inspector"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="checkDate">Tanggal Check</Label>
-                  <Input
-                    id="checkDate"
-                    type="date"
-                    value={qualityControl.checkDate}
-                    onChange={(e) => setQualityControl({...qualityControl, checkDate: e.target.value})}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="result">Hasil</Label>
-                  <Select value={qualityControl.result} onValueChange={(value) => setQualityControl({...qualityControl, result: value})}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Pilih hasil" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Pass">Pass</SelectItem>
-                      <SelectItem value="Fail">Fail</SelectItem>
-                      <SelectItem value="Pending">Pending</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="notes">Catatan</Label>
-                  <Textarea
-                    id="notes"
-                    value={qualityControl.notes}
-                    onChange={(e) => setQualityControl({...qualityControl, notes: e.target.value})}
-                    placeholder="Masukkan catatan quality control"
-                    rows={3}
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsQualityControlOpen(false)}>
-                  Batal
+          <Button className="bg-red-500 hover:bg-red-600 text-white">
+            <Plus className="h-4 w-4 mr-2" />
+            New Order
                 </Button>
-                <Button onClick={handleQualityControl} className="bg-red-500 hover:bg-red-600 text-white">
-                  Setup Quality Control
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Overview Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -402,10 +164,8 @@ const Manufacturing = () => {
                 <Factory className="h-6 w-6 text-blue-600" />
               </div>
               <div>
-                <div className="text-sm text-gray-600">Order Produksi Aktif</div>
-                <div className="text-2xl font-bold text-gray-800">
-                  {productionOrders.filter(o => o.status === 'In Progress').length}
-                </div>
+                <div className="text-sm text-gray-600">Total Orders</div>
+                <div className="text-2xl font-bold text-gray-800">{manufacturingData.overview.totalOrders}</div>
               </div>
             </div>
           </CardContent>
@@ -414,13 +174,11 @@ const Manufacturing = () => {
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="p-3 bg-green-100 rounded-lg">
-                <TrendingUp className="h-6 w-6 text-green-600" />
+                <CheckCircle className="h-6 w-6 text-green-600" />
               </div>
               <div>
-                <div className="text-sm text-gray-600">Efisiensi Rata-rata</div>
-                <div className="text-2xl font-bold text-green-600">
-                  {Math.round(workstations.filter(w => w.status === 'Active').reduce((acc, w) => acc + w.efficiency, 0) / workstations.filter(w => w.status === 'Active').length)}%
-                </div>
+                <div className="text-sm text-gray-600">Completed</div>
+                <div className="text-2xl font-bold text-green-600">{manufacturingData.overview.completedOrders}</div>
               </div>
             </div>
           </CardContent>
@@ -432,10 +190,8 @@ const Manufacturing = () => {
                 <Clock className="h-6 w-6 text-yellow-600" />
               </div>
               <div>
-                <div className="text-sm text-gray-600">Order Tertunda</div>
-                <div className="text-2xl font-bold text-yellow-600">
-                  {productionOrders.filter(o => o.status === 'Planning').length}
-                </div>
+                <div className="text-sm text-gray-600">In Progress</div>
+                <div className="text-2xl font-bold text-yellow-600">{manufacturingData.overview.inProgressOrders}</div>
               </div>
             </div>
           </CardContent>
@@ -444,68 +200,152 @@ const Manufacturing = () => {
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="p-3 bg-purple-100 rounded-lg">
-                <Package2 className="h-6 w-6 text-purple-600" />
+                <Package className="h-6 w-6 text-purple-600" />
               </div>
               <div>
-                <div className="text-sm text-gray-600">Produk Selesai</div>
-                <div className="text-2xl font-bold text-purple-600">
-                  {productionOrders.filter(o => o.status === 'Completed').length}
+                <div className="text-sm text-gray-600">Efficiency</div>
+                <div className="text-2xl font-bold text-purple-600">{manufacturingData.overview.efficiency}%</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-orange-100 rounded-lg">
+                <Settings className="h-6 w-6 text-orange-600" />
+              </div>
+              <div>
+                <div className="text-sm text-gray-600">Workstations</div>
+                <div className="text-2xl font-bold text-orange-600">{manufacturingData.overview.totalWorkstations}</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-green-100 rounded-lg">
+                <Users className="h-6 w-6 text-green-600" />
                 </div>
+              <div>
+                <div className="text-sm text-gray-600">Active</div>
+                <div className="text-2xl font-bold text-green-600">{manufacturingData.overview.activeWorkstations}</div>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <Tabs defaultValue="production" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="production">Order Produksi</TabsTrigger>
-          <TabsTrigger value="bom">Bill of Materials</TabsTrigger>
-          <TabsTrigger value="workstation">Workstation</TabsTrigger>
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="workstations">Workstations</TabsTrigger>
+          <TabsTrigger value="schedules">Schedules</TabsTrigger>
           <TabsTrigger value="quality">Quality Control</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="production" className="space-y-6">
+        {/* Overview Tab */}
+        <TabsContent value="overview" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Production Status</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Total Orders</span>
+                    <Badge variant="outline">{manufacturingData.overview.totalOrders}</Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Completed</span>
+                    <Badge className="bg-green-100 text-green-800">{manufacturingData.overview.completedOrders}</Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">In Progress</span>
+                    <Badge className="bg-yellow-100 text-yellow-800">{manufacturingData.overview.inProgressOrders}</Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Efficiency</span>
+                    <span className="font-semibold text-green-600">{manufacturingData.overview.efficiency}%</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Quality Metrics</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Total Inspections</span>
+                    <Badge variant="outline">{manufacturingData.quality.totalInspections}</Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Passed</span>
+                    <Badge className="bg-green-100 text-green-800">{manufacturingData.quality.passedInspections}</Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Failed</span>
+                    <Badge className="bg-red-100 text-red-800">{manufacturingData.quality.failedInspections}</Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Quality Rate</span>
+                    <span className="font-semibold text-green-600">{manufacturingData.quality.qualityRate}%</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Workstations Tab */}
+        <TabsContent value="workstations" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Daftar Order Produksi</CardTitle>
+              <CardTitle>Workstations</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Order ID</TableHead>
-                    <TableHead>Produk</TableHead>
-                    <TableHead>Qty</TableHead>
-                    <TableHead>Mulai</TableHead>
-                    <TableHead>Estimasi Selesai</TableHead>
-                    <TableHead>Progress</TableHead>
+                    <TableHead>Name</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Current Order</TableHead>
+                    <TableHead>Efficiency</TableHead>
+                    <TableHead>Workers</TableHead>
+                    <TableHead>Capacity</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {productionOrders.map((order) => (
-                    <TableRow key={order.id}>
-                      <TableCell className="font-medium">{order.id}</TableCell>
-                      <TableCell>{order.product}</TableCell>
-                      <TableCell>{order.quantity} pcs</TableCell>
-                      <TableCell>{order.started}</TableCell>
-                      <TableCell>{order.estimated}</TableCell>
+                  {manufacturingData.workstations.map((workstation) => (
+                    <TableRow key={workstation.id} className="hover:bg-gray-50">
+                      <TableCell className="font-medium">{workstation.name}</TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 bg-gray-200 rounded-full h-2">
-                            <div 
-                              className="bg-blue-500 h-2 rounded-full"
-                              style={{ width: `${order.completion}%` }}
-                            ></div>
-                          </div>
-                          <span className="text-sm text-gray-600">{order.completion}%</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={getStatusColor(order.status)}>
-                          {order.status}
+                        <Badge className={workstation.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                          {workstation.status}
                         </Badge>
+                      </TableCell>
+                      <TableCell>{workstation.currentOrder}</TableCell>
+                      <TableCell>
+                        <span className="font-semibold text-green-600">{workstation.efficiency}%</span>
+                      </TableCell>
+                      <TableCell>{workstation.workers}</TableCell>
+                      <TableCell>{workstation.capacity}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="sm">
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -515,99 +355,105 @@ const Manufacturing = () => {
           </Card>
         </TabsContent>
 
-        <TabsContent value="bom" className="space-y-6">
+        {/* Schedules Tab */}
+        <TabsContent value="schedules" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Bill of Materials (BOM)</CardTitle>
+              <CardTitle>Production Schedules</CardTitle>
             </CardHeader>
             <CardContent>
-              {bomItems.map((bom) => (
-                <div key={bom.id} className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-lg font-semibold">{bom.product}</h3>
-                    <span className="text-lg font-bold text-green-600">{bom.totalCost}</span>
-                  </div>
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Material</TableHead>
-                        <TableHead>Qty</TableHead>
-                        <TableHead>Unit</TableHead>
-                        <TableHead>Cost per Unit</TableHead>
+                    <TableHead>Workstation</TableHead>
+                    <TableHead>Order</TableHead>
+                    <TableHead>Start Time</TableHead>
+                    <TableHead>End Time</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {bom.materials.map((material, index) => (
-                        <TableRow key={index}>
-                          <TableCell>{material.name}</TableCell>
-                          <TableCell>{material.qty}</TableCell>
-                          <TableCell>{material.unit}</TableCell>
-                          <TableCell>{material.cost}</TableCell>
+                  {manufacturingData.schedules.map((schedule) => (
+                    <TableRow key={schedule.id} className="hover:bg-gray-50">
+                      <TableCell className="font-medium">{schedule.workstation}</TableCell>
+                      <TableCell>{schedule.order}</TableCell>
+                      <TableCell>{schedule.startTime}</TableCell>
+                      <TableCell>{schedule.endTime}</TableCell>
+                      <TableCell>
+                        <Badge className={schedule.status === 'In Progress' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}>
+                          {schedule.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="sm">
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
-                </div>
-              ))}
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="workstation" className="space-y-6">
+        {/* Quality Control Tab */}
+        <TabsContent value="quality" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Status Workstation</CardTitle>
+                <CardTitle>Quality Summary</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {workstations.map((station) => (
-                  <Card key={station.id} className="border">
-                    <CardContent className="p-4">
-                      <div className="flex justify-between items-start mb-3">
-                        <div>
-                          <h3 className="font-semibold text-gray-800">{station.name}</h3>
-                          <p className="text-sm text-gray-600">{station.id}</p>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Total Inspections</span>
+                    <Badge variant="outline">{manufacturingData.quality.totalInspections}</Badge>
                         </div>
-                        <Badge className={getWorkstationColor(station.status)}>
-                          {station.status}
-                        </Badge>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Passed</span>
+                    <Badge className="bg-green-100 text-green-800">{manufacturingData.quality.passedInspections}</Badge>
                       </div>
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <span className="text-sm text-gray-600">Efisiensi</span>
-                          <span className="font-medium">{station.efficiency}%</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Failed</span>
+                    <Badge className="bg-red-100 text-red-800">{manufacturingData.quality.failedInspections}</Badge>
                         </div>
-                        {station.currentJob && (
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-600">Current Job</span>
-                            <span className="font-medium">{station.currentJob}</span>
-                          </div>
-                        )}
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600">Quality Rate</span>
+                    <span className="font-semibold text-green-600">{manufacturingData.quality.qualityRate}%</span>
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
 
-        <TabsContent value="quality" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Quality Control Dashboard</CardTitle>
+                <CardTitle>Recent Inspections</CardTitle>
             </CardHeader>
-            <CardContent className="text-center py-12">
-              <Wrench className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">Quality Control System</h3>
-              <p className="text-gray-600 mb-6">
-                Monitor kualitas produk, defect tracking, dan quality metrics
-              </p>
-              <Button className="bg-red-500 hover:bg-red-600 text-white">
-                Setup Quality Control
-              </Button>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center p-2 bg-green-50 rounded">
+                    <span className="text-sm">PO-2024-001</span>
+                    <Badge className="bg-green-100 text-green-800">Passed</Badge>
+                  </div>
+                  <div className="flex justify-between items-center p-2 bg-green-50 rounded">
+                    <span className="text-sm">PO-2024-002</span>
+                    <Badge className="bg-green-100 text-green-800">Passed</Badge>
+                  </div>
+                  <div className="flex justify-between items-center p-2 bg-red-50 rounded">
+                    <span className="text-sm">PO-2024-003</span>
+                    <Badge className="bg-red-100 text-red-800">Failed</Badge>
+                  </div>
+                </div>
             </CardContent>
           </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>

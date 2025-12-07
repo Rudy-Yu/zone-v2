@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Filter, Eye, Edit, Trash2, Download } from 'lucide-react';
+import { Plus, Search, Filter, Eye, Edit, Trash2, Download, FileText, Calendar, DollarSign } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -12,6 +12,18 @@ import {
   TableHeader, 
   TableRow 
 } from './ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from './ui/dialog';
+import { Label } from './ui/label';
+import { Textarea } from './ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 const SalesInvoice = () => {
   const [searchTerm, setSearchTerm] = useState('');
