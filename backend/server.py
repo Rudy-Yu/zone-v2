@@ -55,10 +55,6 @@ async def root():
 async def health():
     return {"status": "healthy"}
 
-# Include the router in the app
-app.include_router(api_router)
-
-
 # Define Models
 class StatusCheck(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -326,17 +322,6 @@ async def get_dashboard_data():
     except Exception as e:
         logging.error(f"Error building dashboard data: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error building dashboard data: {str(e)}")
-
-# Include the router in the main app
-app.include_router(api_router)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # Configure logging
 logging.basicConfig(
@@ -6262,3 +6247,6 @@ async def refresh_token():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+# Include the router after all endpoints are defined
+app.include_router(api_router)

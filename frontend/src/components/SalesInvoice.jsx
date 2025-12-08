@@ -30,6 +30,17 @@ const SalesInvoice = () => {
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState({
+    customer_id: '',
+    invoice_date: '',
+    due_date: '',
+    product_id: '',
+    quantity: 1,
+    unit_price: '',
+    notes: ''
+  });
 
   // API configuration
   const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
@@ -104,6 +115,61 @@ const SalesInvoice = () => {
     }
   };
 
+  const handleCreate = async () => {
+    try {
+      setSubmitting(true);
+      setError(null);
+
+      if (!form.customer_id || !form.invoice_date || !form.due_date || !form.product_id || !form.quantity) {
+        throw new Error('Lengkapi customer, tanggal, produk, dan jumlah');
+      }
+
+      const payload = {
+        customer_id: form.customer_id,
+        invoice_date: form.invoice_date,
+        due_date: form.due_date,
+        items: [
+          {
+            product_id: form.product_id,
+            quantity: Number(form.quantity),
+            unit_price: form.unit_price ? Number(form.unit_price) : undefined
+          }
+        ],
+        notes: form.notes || ''
+      };
+
+      const res = await fetch(`${API_URL}/sales-invoices`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Gagal membuat invoice: ${res.status} ${text}`);
+      }
+
+      await fetchInvoices();
+      setDialogOpen(false);
+      setForm({
+        customer_id: '',
+        invoice_date: '',
+        due_date: '',
+        product_id: '',
+        quantity: 1,
+        unit_price: '',
+        notes: ''
+      });
+      alert('Invoice berhasil dibuat');
+    } catch (err) {
+      console.error(err);
+      setError(err.message);
+      alert(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'Paid': return 'bg-green-100 text-green-800';
@@ -147,10 +213,88 @@ const SalesInvoice = () => {
             )}
           </p>
         </div>
-        <Button className="bg-red-500 hover:bg-red-600 text-white">
-          <Plus className="h-4 w-4 mr-2" />
-          Buat Invoice Baru
-        </Button>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button className="bg-red-500 hover:bg-red-600 text-white">
+              <Plus className="h-4 w-4 mr-2" />
+              Buat Invoice Baru
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Buat Invoice Baru</DialogTitle>
+              <DialogDescription>Isi data invoice penjualan.</DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label>Customer ID</Label>
+                <Input
+                  value={form.customer_id}
+                  onChange={(e) => setForm({ ...form, customer_id: e.target.value })}
+                  placeholder="Masukkan ID customer"
+                />
+              </div>
+              <div>
+                <Label>Produk (product_id)</Label>
+                <Input
+                  value={form.product_id}
+                  onChange={(e) => setForm({ ...form, product_id: e.target.value })}
+                  placeholder="Masukkan ID produk"
+                />
+              </div>
+              <div>
+                <Label>Tanggal Invoice</Label>
+                <Input
+                  type="date"
+                  value={form.invoice_date}
+                  onChange={(e) => setForm({ ...form, invoice_date: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Jatuh Tempo</Label>
+                <Input
+                  type="date"
+                  value={form.due_date}
+                  onChange={(e) => setForm({ ...form, due_date: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Jumlah (quantity)</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={form.quantity}
+                  onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Harga Satuan (opsional, fallback ke harga produk)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={form.unit_price}
+                  onChange={(e) => setForm({ ...form, unit_price: e.target.value })}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <Label>Catatan</Label>
+                <Textarea
+                  value={form.notes}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                  placeholder="Catatan tambahan"
+                />
+              </div>
+            </div>
+            <DialogFooter className="mt-4">
+              <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={submitting}>
+                Batal
+              </Button>
+              <Button onClick={handleCreate} disabled={submitting} className="bg-red-500 hover:bg-red-600 text-white">
+                {submitting ? 'Menyimpan...' : 'Simpan Invoice'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Stats Cards */}
