@@ -208,72 +208,124 @@ async def get_status_checks():
 # Dashboard Endpoints
 @api_router.get("/dashboard", response_model=DashboardData)
 async def get_dashboard_data():
-    """Get dashboard statistics and recent transactions"""
-    
-    # Mock data for now - in production, this would come from actual database queries
-    # Calculate stats based on invoices, purchases, products, etc.
-    
-    stats = DashboardStats(
-        total_revenue=194258000.0,
-        total_expense=82450000.0,
-        pending_invoices=23,
-        total_products=1234,
-        revenue_change=12.5,  # percentage
-        expense_change=-3.2,  # percentage
-        invoice_change=5,     # count change
-        product_change=-12    # count change
-    )
-    
-    recent_transactions = [
-        Transaction(
-            id="INV-001",
-            type="Invoice",
-            customer="PT. ABC Indonesia",
-            amount="Rp 15.000.000",
-            status="Paid",
-            date="2024-01-20"
-        ),
-        Transaction(
-            id="INV-002",
-            type="Invoice",
-            customer="CV. XYZ Trading",
-            amount="Rp 8.500.000",
-            status="Pending",
-            date="2024-01-19"
-        ),
-        Transaction(
-            id="PO-003",
-            type="Purchase",
-            customer="Supplier Materials",
-            amount="Rp 12.300.000",
-            status="Paid",
-            date="2024-01-18"
-        ),
-        Transaction(
-            id="INV-004",
-            type="Invoice",
-            customer="PT. DEF Corp",
-            amount="Rp 22.100.000",
-            status="Overdue",
-            date="2024-01-15"
+    """Get dashboard statistics and recent transactions from live data"""
+    try:
+        # Fetch data
+        sales_invoices = await get_documents("sales_invoices", limit=1000)
+        purchase_invoices = await get_documents("purchase_invoices", limit=1000)
+        products_count = await count_documents("products")
+
+        # Helpers
+        def parse_date(value):
+            if isinstance(value, datetime):
+                return value
+            if not value:
+                return None
+            for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+                try:
+                    return datetime.strptime(value, fmt)
+                except Exception:
+                    continue
+            return None
+
+        def fmt_currency(amount: float) -> str:
+            try:
+                return f"Rp {amount:,.0f}"
+            except Exception:
+                return str(amount)
+
+        # Stats
+        total_revenue = sum(inv.get("amount", 0.0) for inv in sales_invoices if inv.get("status") in ["Paid", "Pending", "Overdue"])
+        total_expense = sum(inv.get("amount", 0.0) for inv in purchase_invoices if inv.get("status") in ["Paid", "Pending", "Overdue"])
+        pending_invoices = sum(1 for inv in sales_invoices if inv.get("status") in ["Pending", "Overdue"])
+
+        # Simple deltas (placeholders until trend logic added)
+        revenue_change = 0.0
+        expense_change = 0.0
+        invoice_change = 0
+        product_change = 0
+
+        stats = DashboardStats(
+            total_revenue=total_revenue,
+            total_expense=total_expense,
+            pending_invoices=pending_invoices,
+            total_products=products_count,
+            revenue_change=revenue_change,
+            expense_change=expense_change,
+            invoice_change=invoice_change,
+            product_change=product_change
         )
-    ]
-    
-    # Cash flow chart data for last 6 months
-    cash_flow_data = [
-        ChartDataPoint(month="Agustus", revenue=150000000, expense=80000000),
-        ChartDataPoint(month="September", revenue=180000000, expense=90000000),
-        ChartDataPoint(month="Oktober", revenue=165000000, expense=75000000),
-        ChartDataPoint(month="November", revenue=200000000, expense=95000000),
-        ChartDataPoint(month="Desember", revenue=220000000, expense=100000000),
-        ChartDataPoint(month="Januari", revenue=194258000, expense=82450000)
-    ]
-    
-    return DashboardData(
-        stats=stats,
-        recent_transactions=recent_transactions,
-        cash_flow_data=cash_flow_data
-    )
+
+        # Recent transactions (combine sales & purchases, sorted by date desc)
+        recent_items = []
+        for inv in sales_invoices:
+            recent_items.append({
+                "id": inv.get("id", ""),
+                "type": "Invoice",
+                "customer": inv.get("customer_name", ""),
+                "amount": fmt_currency(inv.get("amount", 0.0)),
+                "status": inv.get("status", ""),
+                "date": inv.get("invoice_date") or (inv.get("created_at").isoformat() if isinstance(inv.get("created_at"), datetime) else inv.get("created_at", "")),
+                "created_at": parse_date(inv.get("created_at") or inv.get("invoice_date"))
+            })
+        for pinv in purchase_invoices:
+            recent_items.append({
+                "id": pinv.get("id", ""),
+                "type": "Purchase",
+                "customer": pinv.get("vendor_name", ""),
+                "amount": fmt_currency(pinv.get("amount", 0.0)),
+                "status": pinv.get("status", ""),
+                "date": pinv.get("invoice_date") or (pinv.get("created_at").isoformat() if isinstance(pinv.get("created_at"), datetime) else pinv.get("created_at", "")),
+                "created_at": parse_date(pinv.get("created_at") or pinv.get("invoice_date"))
+            })
+        recent_items = sorted(recent_items, key=lambda x: x.get("created_at") or datetime.min, reverse=True)[:5]
+        recent_transactions = [
+            Transaction(
+                id=item.get("id", ""),
+                type=item.get("type", ""),
+                customer=item.get("customer", ""),
+                amount=item.get("amount", ""),
+                status=item.get("status", ""),
+                date=item.get("date", "")
+            ) for item in recent_items
+        ]
+
+        # Cash flow data (last 6 months aggregation)
+        now = datetime.utcnow()
+        months = []
+        for i in range(5, -1, -1):
+            month_ref = (now.replace(day=1) - timedelta(days=30 * i))
+            months.append((month_ref.year, month_ref.month))
+
+        bucket = {(y, m): {"revenue": 0.0, "expense": 0.0} for (y, m) in months}
+
+        for inv in sales_invoices:
+            dt = parse_date(inv.get("invoice_date") or inv.get("created_at"))
+            if dt and (dt.year, dt.month) in bucket:
+                bucket[(dt.year, dt.month)]["revenue"] += inv.get("amount", 0.0)
+        for pinv in purchase_invoices:
+            dt = parse_date(pinv.get("invoice_date") or pinv.get("created_at"))
+            if dt and (dt.year, dt.month) in bucket:
+                bucket[(dt.year, dt.month)]["expense"] += pinv.get("amount", 0.0)
+
+        month_names = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
+        cash_flow_data = [
+            ChartDataPoint(
+                month=f"{month_names[m-1]} {y}",
+                revenue=bucket[(y, m)]["revenue"],
+                expense=bucket[(y, m)]["expense"]
+            )
+            for (y, m) in months
+        ]
+
+        return DashboardData(
+            stats=stats,
+            recent_transactions=recent_transactions,
+            cash_flow_data=cash_flow_data
+        )
+    except Exception as e:
+        logging.error(f"Error building dashboard data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error building dashboard data: {str(e)}")
 
 # Include the router in the main app
 app.include_router(api_router)
@@ -4100,108 +4152,407 @@ class ProductionOrderCreate(BaseModel):
 
 @api_router.get("/production-orders", response_model=List[ProductionOrder])
 async def get_production_orders():
-    orders = [
-        {
-            "id": "PO-001",
-            "order_number": "PO-2024-001",
-            "product_id": "PRD-001",
-            "product_name": "Laptop Gaming",
-            "order_date": "2024-01-20",
-            "start_date": "2024-01-22",
-            "due_date": "2024-01-30",
-            "status": "In Production",
-            "quantity": 100,
-            "completed_quantity": 45,
-            "workstation": "Assembly Line A",
-            "assigned_workers": ["John Worker", "Jane Worker", "Bob Worker"],
-            "bom": [
-                {"component_id": "COMP-001", "component_name": "CPU Intel i7", "quantity": 100, "unit_price": 5000000, "total": 500000000},
-                {"component_id": "COMP-002", "component_name": "RAM 16GB", "quantity": 100, "unit_price": 1500000, "total": 150000000}
-            ],
-            "created_by": "Production Manager",
-            "notes": "High priority order",
-            "created_at": "2024-01-20 10:30:00"
-        }
-    ]
-    return orders
+    """Get all production orders"""
+    try:
+        orders_data = await get_documents("production_orders", sort=[("created_at", -1)])
+        
+        # Convert to ProductionOrder model format
+        orders = []
+        for order in orders_data:
+            orders.append({
+                "id": order.get("id", ""),
+                "order_number": order.get("order_number", ""),
+                "product_id": order.get("product_id", ""),
+                "product_name": order.get("product_name", ""),
+                "order_date": order.get("order_date", ""),
+                "start_date": order.get("start_date", ""),
+                "due_date": order.get("due_date", ""),
+                "status": order.get("status", "Draft"),
+                "quantity": order.get("quantity", 0),
+                "completed_quantity": order.get("completed_quantity", 0),
+                "workstation": order.get("workstation", ""),
+                "assigned_workers": order.get("assigned_workers", []),
+                "bom": order.get("bom", []),
+                "created_by": order.get("created_by", ""),
+                "notes": order.get("notes", ""),
+                "created_at": order.get("created_at", datetime.utcnow()).isoformat() if isinstance(order.get("created_at"), datetime) else order.get("created_at", "")
+            })
+        
+        return orders
+    except Exception as e:
+        logging.error(f"Error fetching production orders: {str(e)}")
+        return []
 
 
 @api_router.post("/production-orders", response_model=ProductionOrder)
 async def create_production_order(order: ProductionOrderCreate):
-    new_order = ProductionOrder(
-        id=f"PO-{str(uuid.uuid4())[:8].upper()}",
-        order_number=f"PO-2024-{str(uuid.uuid4())[:6].upper()}",
-        product_id=order.product_id,
-        product_name=order.product_name,
-        order_date=order.order_date,
-        start_date=order.start_date,
-        due_date=order.due_date,
-        status="Draft",
-        quantity=order.quantity,
-        completed_quantity=0,
-        workstation=order.workstation,
-        assigned_workers=[],
-        bom=order.bom,
-        created_by="Current User",
-        notes=order.notes,
-        created_at=datetime.utcnow().isoformat(),
-    )
-    return new_order
+    """Create a new production order"""
+    try:
+        # Validate product exists
+        product = await get_document("products", order.product_id)
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        
+        # Validate BOM components and check stock availability
+        for bom_item in order.bom:
+            component_id = bom_item.get("component_id")
+            required_qty = bom_item.get("quantity", 0)
+            
+            if not component_id:
+                raise HTTPException(status_code=400, detail="Component ID is required for all BOM items")
+            
+            if required_qty <= 0:
+                raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
+            
+            # Get component product
+            component = await get_document("products", component_id)
+            if not component:
+                raise HTTPException(status_code=404, detail=f"Component {component_id} not found")
+            
+            # Check stock availability (multiply by production quantity)
+            total_required = required_qty * order.quantity
+            current_stock = component.get("stock", 0)
+            
+            if current_stock < total_required:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Insufficient stock for component {component.get('name', component_id)}. Available: {current_stock}, Required: {total_required}"
+                )
+            
+            # Calculate BOM item total if not provided
+            if "total" not in bom_item or bom_item["total"] == 0:
+                unit_price = bom_item.get("unit_price", component.get("cost", 0))
+                bom_item["unit_price"] = unit_price
+                bom_item["total"] = unit_price * required_qty * order.quantity
+            
+            # Add component name if not provided
+            if "component_name" not in bom_item:
+                bom_item["component_name"] = component.get("name", "")
+        
+        # Generate order number
+        year = datetime.utcnow().year
+        last_order = await db.production_orders.find_one(
+            {"order_number": {"$regex": f"^PROD-{year}-"}},
+            sort=[("order_number", -1)]
+        )
+        
+        if last_order:
+            last_num = int(last_order.get("order_number", "0").split("-")[-1])
+            order_number = f"PROD-{year}-{str(last_num + 1).zfill(6)}"
+        else:
+            order_number = f"PROD-{year}-000001"
+        
+        # Prepare order data
+        order_data = {
+            "order_number": order_number,
+            "product_id": order.product_id,
+            "product_name": order.product_name or product.get("name", ""),
+            "order_date": order.order_date,
+            "start_date": order.start_date,
+            "due_date": order.due_date,
+            "status": "Draft",
+            "quantity": order.quantity,
+            "completed_quantity": 0,
+            "workstation": order.workstation,
+            "assigned_workers": [],
+            "bom": order.bom,
+            "created_by": "Current User",  # TODO: Get from auth token
+            "notes": order.notes or ""
+        }
+        
+        # Save to database
+        created_order = await create_document("production_orders", order_data)
+        
+        # Return in ProductionOrder model format
+        return ProductionOrder(
+            id=created_order.get("id", ""),
+            order_number=created_order.get("order_number", ""),
+            product_id=created_order.get("product_id", ""),
+            product_name=created_order.get("product_name", ""),
+            order_date=created_order.get("order_date", ""),
+            start_date=created_order.get("start_date", ""),
+            due_date=created_order.get("due_date", ""),
+            status=created_order.get("status", "Draft"),
+            quantity=created_order.get("quantity", 0),
+            completed_quantity=created_order.get("completed_quantity", 0),
+            workstation=created_order.get("workstation", ""),
+            assigned_workers=created_order.get("assigned_workers", []),
+            bom=created_order.get("bom", []),
+            created_by=created_order.get("created_by", ""),
+            notes=created_order.get("notes", ""),
+            created_at=created_order.get("created_at", datetime.utcnow()).isoformat() if isinstance(created_order.get("created_at"), datetime) else created_order.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error creating production order: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error creating production order: {str(e)}")
 
 
 @api_router.get("/production-orders/{order_id}", response_model=ProductionOrder)
 async def get_production_order(order_id: str):
-    example = {
-        "id": "PO-001",
-        "order_number": "PO-2024-001",
-        "product_id": "PRD-001",
-        "product_name": "Laptop Gaming",
-        "order_date": "2024-01-20",
-        "start_date": "2024-01-22",
-        "due_date": "2024-01-30",
-        "status": "In Production",
-        "quantity": 100,
-        "completed_quantity": 45,
-        "workstation": "Assembly Line A",
-        "assigned_workers": ["John Worker", "Jane Worker"],
-        "bom": [
-            {"component_id": "COMP-001", "component_name": "CPU Intel i7", "quantity": 100, "unit_price": 5000000, "total": 500000000}
-        ],
-        "created_by": "Production Manager",
-        "notes": "High priority order",
-        "created_at": "2024-01-20 10:30:00"
-    }
-    if order_id != "PO-001":
-        raise HTTPException(status_code=404, detail="Production order not found")
-    return example
+    """Get production order by ID"""
+    try:
+        order = await get_document("production_orders", order_id)
+        if not order:
+            raise HTTPException(status_code=404, detail="Production order not found")
+        
+        # Return in ProductionOrder model format
+        return ProductionOrder(
+            id=order.get("id", ""),
+            order_number=order.get("order_number", ""),
+            product_id=order.get("product_id", ""),
+            product_name=order.get("product_name", ""),
+            order_date=order.get("order_date", ""),
+            start_date=order.get("start_date", ""),
+            due_date=order.get("due_date", ""),
+            status=order.get("status", "Draft"),
+            quantity=order.get("quantity", 0),
+            completed_quantity=order.get("completed_quantity", 0),
+            workstation=order.get("workstation", ""),
+            assigned_workers=order.get("assigned_workers", []),
+            bom=order.get("bom", []),
+            created_by=order.get("created_by", ""),
+            notes=order.get("notes", ""),
+            created_at=order.get("created_at", datetime.utcnow()).isoformat() if isinstance(order.get("created_at"), datetime) else order.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error fetching production order: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching production order: {str(e)}")
 
 
 @api_router.put("/production-orders/{order_id}", response_model=ProductionOrder)
 async def update_production_order(order_id: str, order: ProductionOrderCreate):
-    updated = ProductionOrder(
-        id=order_id,
-        order_number=f"PO-2024-{order_id}",
-        product_id=order.product_id,
-        product_name=order.product_name,
-        order_date=order.order_date,
-        start_date=order.start_date,
-        due_date=order.due_date,
-        status="Draft",
-        quantity=order.quantity,
-        completed_quantity=0,
-        workstation=order.workstation,
-        assigned_workers=[],
-        bom=order.bom,
-        created_by="Current User",
-        notes=order.notes,
-        created_at=datetime.utcnow().isoformat(),
-    )
-    return updated
+    """Update production order"""
+    try:
+        # Check if order exists
+        existing = await get_document("production_orders", order_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Production order not found")
+        
+        # Can't update if already in production or completed
+        if existing.get("status") in ["In Production", "Completed"]:
+            raise HTTPException(status_code=400, detail=f"Cannot update order with status: {existing.get('status')}")
+        
+        # Validate product
+        product = await get_document("products", order.product_id)
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        
+        # Validate BOM components
+        for bom_item in order.bom:
+            component_id = bom_item.get("component_id")
+            required_qty = bom_item.get("quantity", 0)
+            
+            if not component_id:
+                raise HTTPException(status_code=400, detail="Component ID is required for all BOM items")
+            
+            component = await get_document("products", component_id)
+            if not component:
+                raise HTTPException(status_code=404, detail=f"Component {component_id} not found")
+            
+            total_required = required_qty * order.quantity
+            current_stock = component.get("stock", 0)
+            
+            # For updates, check if we're increasing quantity
+            existing_bom_item = next((i for i in existing.get("bom", []) if i.get("component_id") == component_id), None)
+            if existing_bom_item:
+                existing_total = existing_bom_item.get("quantity", 0) * existing.get("quantity", 0)
+                additional_required = total_required - existing_total
+                if additional_required > 0 and current_stock < additional_required:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Insufficient stock for component {component.get('name', component_id)}. Available: {current_stock}, Additional Required: {additional_required}"
+                    )
+            else:
+                if current_stock < total_required:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Insufficient stock for component {component.get('name', component_id)}. Available: {current_stock}, Required: {total_required}"
+                    )
+            
+            if "total" not in bom_item or bom_item["total"] == 0:
+                unit_price = bom_item.get("unit_price", component.get("cost", 0))
+                bom_item["unit_price"] = unit_price
+                bom_item["total"] = unit_price * required_qty * order.quantity
+            
+            if "component_name" not in bom_item:
+                bom_item["component_name"] = component.get("name", "")
+        
+        # Prepare update data
+        update_data = {
+            "product_id": order.product_id,
+            "product_name": order.product_name or product.get("name", ""),
+            "order_date": order.order_date,
+            "start_date": order.start_date,
+            "due_date": order.due_date,
+            "quantity": order.quantity,
+            "workstation": order.workstation,
+            "bom": order.bom,
+            "notes": order.notes or ""
+        }
+        
+        # Update in database
+        updated_order = await update_document("production_orders", order_id, update_data)
+        if not updated_order:
+            raise HTTPException(status_code=500, detail="Failed to update production order")
+        
+        # Return in ProductionOrder model format
+        return ProductionOrder(
+            id=updated_order.get("id", ""),
+            order_number=updated_order.get("order_number", ""),
+            product_id=updated_order.get("product_id", ""),
+            product_name=updated_order.get("product_name", ""),
+            order_date=updated_order.get("order_date", ""),
+            start_date=updated_order.get("start_date", ""),
+            due_date=updated_order.get("due_date", ""),
+            status=updated_order.get("status", "Draft"),
+            quantity=updated_order.get("quantity", 0),
+            completed_quantity=updated_order.get("completed_quantity", 0),
+            workstation=updated_order.get("workstation", ""),
+            assigned_workers=updated_order.get("assigned_workers", []),
+            bom=updated_order.get("bom", []),
+            created_by=updated_order.get("created_by", ""),
+            notes=updated_order.get("notes", ""),
+            created_at=updated_order.get("created_at", datetime.utcnow()).isoformat() if isinstance(updated_order.get("created_at"), datetime) else updated_order.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error updating production order: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating production order: {str(e)}")
 
 
 @api_router.delete("/production-orders/{order_id}")
 async def delete_production_order(order_id: str):
-    return {"message": "Production order deleted"}
+    """Delete production order"""
+    try:
+        # Check if order exists
+        existing = await get_document("production_orders", order_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Production order not found")
+        
+        # Can't delete if already in production or completed
+        if existing.get("status") in ["In Production", "Completed"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot delete order with status: {existing.get('status')}. Cancel it first."
+            )
+        
+        # Delete from database
+        deleted = await delete_document("production_orders", order_id)
+        if not deleted:
+            raise HTTPException(status_code=500, detail="Failed to delete production order")
+        
+        return {"message": "Production order deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error deleting production order: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error deleting production order: {str(e)}")
+
+@api_router.put("/production-orders/{order_id}/status")
+async def update_production_order_status(order_id: str, status_data: dict):
+    """Update production order status with material consumption"""
+    try:
+        new_status = status_data.get("status")
+        if not new_status:
+            raise HTTPException(status_code=400, detail="Status is required")
+        
+        # Get order
+        order = await get_document("production_orders", order_id)
+        if not order:
+            raise HTTPException(status_code=404, detail="Production order not found")
+        
+        old_status = order.get("status", "Draft")
+        
+        # Status transitions
+        valid_transitions = {
+            "Draft": ["Scheduled", "Cancelled"],
+            "Scheduled": ["In Production", "Cancelled"],
+            "In Production": ["Completed", "Cancelled"],
+            "Completed": [],
+            "Cancelled": []
+        }
+        
+        if new_status not in valid_transitions.get(old_status, []):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid status transition from {old_status} to {new_status}"
+            )
+        
+        # Handle status-specific logic
+        update_data = {"status": new_status}
+        
+        if new_status == "In Production" and old_status in ["Draft", "Scheduled"]:
+            # Start production - consume materials from BOM
+            for bom_item in order.get("bom", []):
+                component_id = bom_item.get("component_id")
+                required_qty_per_unit = bom_item.get("quantity", 0)
+                total_required = required_qty_per_unit * order.get("quantity", 0)
+                
+                if component_id and total_required > 0:
+                    component = await get_document("products", component_id)
+                    if component:
+                        current_stock = component.get("stock", 0)
+                        if current_stock >= total_required:
+                            new_stock = current_stock - total_required
+                            await update_document("products", component_id, {"stock": new_stock})
+                            logging.info(f"Consumed {total_required} units of {component.get('name', component_id)} for production order {order.get('order_number', '')}")
+                        else:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"Insufficient stock for component {component.get('name', component_id)}. Available: {current_stock}, Required: {total_required}"
+                            )
+        
+        elif new_status == "Completed" and old_status == "In Production":
+            # Complete production - add finished product to stock
+            product_id = order.get("product_id")
+            completed_qty = status_data.get("completed_quantity", order.get("quantity", 0))
+            
+            if product_id and completed_qty > 0:
+                product = await get_document("products", product_id)
+                if product:
+                    current_stock = product.get("stock", 0)
+                    new_stock = current_stock + completed_qty
+                    await update_document("products", product_id, {"stock": new_stock})
+                    update_data["completed_quantity"] = completed_qty
+                    logging.info(f"Added {completed_qty} units of {product.get('name', product_id)} to stock from production order {order.get('order_number', '')}")
+        
+        elif new_status == "Cancelled" and old_status == "In Production":
+            # Cancel production - return materials to stock
+            for bom_item in order.get("bom", []):
+                component_id = bom_item.get("component_id")
+                required_qty_per_unit = bom_item.get("quantity", 0)
+                total_required = required_qty_per_unit * order.get("quantity", 0)
+                
+                if component_id and total_required > 0:
+                    component = await get_document("products", component_id)
+                    if component:
+                        current_stock = component.get("stock", 0)
+                        new_stock = current_stock + total_required
+                        await update_document("products", component_id, {"stock": new_stock})
+                        logging.info(f"Returned {total_required} units of {component.get('name', component_id)} to stock from cancelled production order")
+        
+        # Update order status
+        updated_order = await update_document("production_orders", order_id, update_data)
+        
+        return {
+            "message": f"Order status updated from {old_status} to {new_status}",
+            "order": {
+                "id": updated_order.get("id", ""),
+                "order_number": updated_order.get("order_number", ""),
+                "status": updated_order.get("status", ""),
+                "completed_quantity": updated_order.get("completed_quantity", 0)
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error updating production order status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating production order status: {str(e)}")
 
 
 # =============================
@@ -4983,6 +5334,243 @@ async def get_marketing_analytics():
 
 
 # =============================
+# Chart of Accounts Module Models
+# =============================
+
+class ChartOfAccount(BaseModel):
+    id: str
+    account_code: str
+    account_name: str
+    account_type: str  # Asset, Liability, Equity, Revenue, Expense
+    normal_balance: str  # Debit, Credit
+    balance: float
+    parent_account: Optional[str] = None
+    description: Optional[str] = ""
+    status: str  # Active, Inactive
+    created_at: str
+
+
+class ChartOfAccountCreate(BaseModel):
+    account_code: str
+    account_name: str
+    account_type: str
+    normal_balance: str
+    parent_account: Optional[str] = None
+    description: Optional[str] = ""
+    status: str = "Active"
+
+
+# =============================
+# Chart of Accounts Module Endpoints
+# =============================
+
+@api_router.get("/chart-of-accounts", response_model=List[ChartOfAccount])
+async def get_chart_of_accounts():
+    """Get all chart of accounts"""
+    try:
+        accounts_data = await get_documents("chart_of_accounts", sort=[("account_code", 1)])
+        
+        # Convert to ChartOfAccount model format
+        accounts = []
+        for account in accounts_data:
+            accounts.append({
+                "id": account.get("id", ""),
+                "account_code": account.get("account_code", ""),
+                "account_name": account.get("account_name", ""),
+                "account_type": account.get("account_type", ""),
+                "normal_balance": account.get("normal_balance", ""),
+                "balance": account.get("balance", 0.0),
+                "parent_account": account.get("parent_account"),
+                "description": account.get("description", ""),
+                "status": account.get("status", "Active"),
+                "created_at": account.get("created_at", datetime.utcnow()).isoformat() if isinstance(account.get("created_at"), datetime) else account.get("created_at", "")
+            })
+        
+        return accounts
+    except Exception as e:
+        logging.error(f"Error fetching chart of accounts: {str(e)}")
+        return []
+
+
+@api_router.post("/chart-of-accounts", response_model=ChartOfAccount)
+async def create_chart_of_account(account: ChartOfAccountCreate):
+    """Create a new chart of account"""
+    try:
+        # Check if account code already exists
+        existing = await find_one_document("chart_of_accounts", {"account_code": account.account_code})
+        if existing:
+            raise HTTPException(status_code=400, detail="Account code already exists")
+        
+        # Validate parent account if provided
+        if account.parent_account:
+            parent = await get_document("chart_of_accounts", account.parent_account)
+            if not parent:
+                raise HTTPException(status_code=404, detail="Parent account not found")
+        
+        # Prepare account data
+        account_data = {
+            "account_code": account.account_code,
+            "account_name": account.account_name,
+            "account_type": account.account_type,
+            "normal_balance": account.normal_balance,
+            "balance": 0.0,
+            "parent_account": account.parent_account,
+            "description": account.description or "",
+            "status": account.status or "Active"
+        }
+        
+        # Save to database
+        created_account = await create_document("chart_of_accounts", account_data)
+        
+        # Return in ChartOfAccount model format
+        return ChartOfAccount(
+            id=created_account.get("id", ""),
+            account_code=created_account.get("account_code", ""),
+            account_name=created_account.get("account_name", ""),
+            account_type=created_account.get("account_type", ""),
+            normal_balance=created_account.get("normal_balance", ""),
+            balance=created_account.get("balance", 0.0),
+            parent_account=created_account.get("parent_account"),
+            description=created_account.get("description", ""),
+            status=created_account.get("status", "Active"),
+            created_at=created_account.get("created_at", datetime.utcnow()).isoformat() if isinstance(created_account.get("created_at"), datetime) else created_account.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error creating chart of account: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error creating chart of account: {str(e)}")
+
+
+@api_router.get("/chart-of-accounts/{account_id}", response_model=ChartOfAccount)
+async def get_chart_of_account(account_id: str):
+    """Get chart of account by ID"""
+    try:
+        account = await get_document("chart_of_accounts", account_id)
+        if not account:
+            raise HTTPException(status_code=404, detail="Chart of account not found")
+        
+        # Return in ChartOfAccount model format
+        return ChartOfAccount(
+            id=account.get("id", ""),
+            account_code=account.get("account_code", ""),
+            account_name=account.get("account_name", ""),
+            account_type=account.get("account_type", ""),
+            normal_balance=account.get("normal_balance", ""),
+            balance=account.get("balance", 0.0),
+            parent_account=account.get("parent_account"),
+            description=account.get("description", ""),
+            status=account.get("status", "Active"),
+            created_at=account.get("created_at", datetime.utcnow()).isoformat() if isinstance(account.get("created_at"), datetime) else account.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error fetching chart of account: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching chart of account: {str(e)}")
+
+
+@api_router.put("/chart-of-accounts/{account_id}", response_model=ChartOfAccount)
+async def update_chart_of_account(account_id: str, account: ChartOfAccountCreate):
+    """Update chart of account"""
+    try:
+        # Check if account exists
+        existing = await get_document("chart_of_accounts", account_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Chart of account not found")
+        
+        # Check if account code is being changed and if new code already exists
+        if account.account_code != existing.get("account_code"):
+            code_check = await find_one_document("chart_of_accounts", {"account_code": account.account_code})
+            if code_check and code_check.get("id") != account_id:
+                raise HTTPException(status_code=400, detail="Account code already exists")
+        
+        # Validate parent account if provided
+        if account.parent_account and account.parent_account != existing.get("parent_account"):
+            parent = await get_document("chart_of_accounts", account.parent_account)
+            if not parent:
+                raise HTTPException(status_code=404, detail="Parent account not found")
+        
+        # Prepare update data (don't update balance directly - it's managed by journal entries)
+        update_data = {
+            "account_code": account.account_code,
+            "account_name": account.account_name,
+            "account_type": account.account_type,
+            "normal_balance": account.normal_balance,
+            "parent_account": account.parent_account,
+            "description": account.description or "",
+            "status": account.status
+        }
+        
+        # Update in database
+        updated_account = await update_document("chart_of_accounts", account_id, update_data)
+        if not updated_account:
+            raise HTTPException(status_code=500, detail="Failed to update chart of account")
+        
+        # Return in ChartOfAccount model format
+        return ChartOfAccount(
+            id=updated_account.get("id", ""),
+            account_code=updated_account.get("account_code", ""),
+            account_name=updated_account.get("account_name", ""),
+            account_type=updated_account.get("account_type", ""),
+            normal_balance=updated_account.get("normal_balance", ""),
+            balance=updated_account.get("balance", 0.0),
+            parent_account=updated_account.get("parent_account"),
+            description=updated_account.get("description", ""),
+            status=updated_account.get("status", "Active"),
+            created_at=updated_account.get("created_at", datetime.utcnow()).isoformat() if isinstance(updated_account.get("created_at"), datetime) else updated_account.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error updating chart of account: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating chart of account: {str(e)}")
+
+
+@api_router.delete("/chart-of-accounts/{account_id}")
+async def delete_chart_of_account(account_id: str):
+    """Delete chart of account"""
+    try:
+        # Check if account exists
+        existing = await get_document("chart_of_accounts", account_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Chart of account not found")
+        
+        # Check if account has balance
+        if existing.get("balance", 0.0) != 0.0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete account with non-zero balance. Balance must be zero."
+            )
+        
+        # Check if account has journal entries
+        journal_entries = await count_documents("general_journal", {
+            "$or": [
+                {"debit_account": account_id},
+                {"credit_account": account_id}
+            ]
+        })
+        
+        if journal_entries > 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete account that has journal entries. Deactivate it instead."
+            )
+        
+        # Delete from database
+        deleted = await delete_document("chart_of_accounts", account_id)
+        if not deleted:
+            raise HTTPException(status_code=500, detail="Failed to delete chart of account")
+        
+        return {"message": "Chart of account deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error deleting chart of account: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error deleting chart of account: {str(e)}")
+
+
+# =============================
 # General Journal Module Models
 # =============================
 
@@ -5017,115 +5605,337 @@ class GeneralJournalEntryCreate(BaseModel):
 
 @api_router.get("/general-journal", response_model=List[GeneralJournalEntry])
 async def get_general_journal_entries():
-    entries = [
-        {
-            "id": "JE-001",
-            "entry_number": "JE-2024-001",
-            "entry_date": "2024-01-20",
-            "description": "Sales Revenue",
-            "debit_account": "Cash",
-            "credit_account": "Sales Revenue",
-            "debit_amount": 15000000.0,
-            "credit_amount": 15000000.0,
-            "reference": "INV-001",
-            "status": "Posted",
-            "created_by": "Accountant",
-            "created_at": "2024-01-20 10:30:00"
-        },
-        {
-            "id": "JE-002",
-            "entry_number": "JE-2024-002",
-            "entry_date": "2024-01-20",
-            "description": "Purchase of Inventory",
-            "debit_account": "Inventory",
-            "credit_account": "Accounts Payable",
-            "debit_amount": 8000000.0,
-            "credit_amount": 8000000.0,
-            "reference": "PO-001",
-            "status": "Posted",
-            "created_by": "Accountant",
-            "created_at": "2024-01-20 11:15:00"
-        },
-        {
-            "id": "JE-003",
-            "entry_number": "JE-2024-003",
-            "entry_date": "2024-01-21",
-            "description": "Office Supplies Expense",
-            "debit_account": "Office Supplies Expense",
-            "credit_account": "Cash",
-            "debit_amount": 500000.0,
-            "credit_amount": 500000.0,
-            "reference": "EXP-001",
-            "status": "Draft",
-            "created_by": "Accountant",
-            "created_at": "2024-01-21 09:00:00"
-        }
-    ]
-    return entries
+    """Get all general journal entries"""
+    try:
+        entries_data = await get_documents("general_journal", sort=[("created_at", -1)])
+        
+        # Convert to GeneralJournalEntry model format
+        entries = []
+        for entry in entries_data:
+            # Get account names
+            debit_account_id = entry.get("debit_account", "")
+            credit_account_id = entry.get("credit_account", "")
+            
+            debit_account_name = ""
+            credit_account_name = ""
+            
+            if debit_account_id:
+                debit_acc = await get_document("chart_of_accounts", debit_account_id)
+                if debit_acc:
+                    debit_account_name = debit_acc.get("account_name", "")
+            
+            if credit_account_id:
+                credit_acc = await get_document("chart_of_accounts", credit_account_id)
+                if credit_acc:
+                    credit_account_name = credit_acc.get("account_name", "")
+            
+            entries.append({
+                "id": entry.get("id", ""),
+                "entry_number": entry.get("entry_number", ""),
+                "entry_date": entry.get("entry_date", ""),
+                "description": entry.get("description", ""),
+                "debit_account": debit_account_name or debit_account_id,
+                "credit_account": credit_account_name or credit_account_id,
+                "debit_amount": entry.get("debit_amount", 0.0),
+                "credit_amount": entry.get("credit_amount", 0.0),
+                "reference": entry.get("reference", ""),
+                "status": entry.get("status", "Draft"),
+                "created_by": entry.get("created_by", ""),
+                "created_at": entry.get("created_at", datetime.utcnow()).isoformat() if isinstance(entry.get("created_at"), datetime) else entry.get("created_at", "")
+            })
+        
+        return entries
+    except Exception as e:
+        logging.error(f"Error fetching general journal entries: {str(e)}")
+        return []
 
 
 @api_router.post("/general-journal", response_model=GeneralJournalEntry)
 async def create_general_journal_entry(entry: GeneralJournalEntryCreate):
-    new_entry = GeneralJournalEntry(
-        id=f"JE-{str(uuid.uuid4())[:8].upper()}",
-        entry_number=f"JE-2024-{str(uuid.uuid4())[:6].upper()}",
-        entry_date=entry.entry_date,
-        description=entry.description,
-        debit_account=entry.debit_account,
-        credit_account=entry.credit_account,
-        debit_amount=entry.debit_amount,
-        credit_amount=entry.credit_amount,
-        reference=entry.reference,
-        status="Draft",
-        created_by="Current User",
-        created_at=datetime.utcnow().isoformat(),
-    )
-    return new_entry
+    """Create a new general journal entry"""
+    try:
+        # Validate debit and credit amounts match
+        if entry.debit_amount != entry.credit_amount:
+            raise HTTPException(status_code=400, detail="Debit and credit amounts must be equal")
+        
+        # Validate accounts exist
+        debit_account = await get_document("chart_of_accounts", entry.debit_account)
+        if not debit_account:
+            raise HTTPException(status_code=404, detail="Debit account not found")
+        
+        credit_account = await get_document("chart_of_accounts", entry.credit_account)
+        if not credit_account:
+            raise HTTPException(status_code=404, detail="Credit account not found")
+        
+        # Generate entry number
+        year = datetime.utcnow().year
+        last_entry = await db.general_journal.find_one(
+            {"entry_number": {"$regex": f"^JE-{year}-"}},
+            sort=[("entry_number", -1)]
+        )
+        
+        if last_entry:
+            last_num = int(last_entry.get("entry_number", "0").split("-")[-1])
+            entry_number = f"JE-{year}-{str(last_num + 1).zfill(6)}"
+        else:
+            entry_number = f"JE-{year}-000001"
+        
+        # Prepare entry data
+        entry_data = {
+            "entry_number": entry_number,
+            "entry_date": entry.entry_date,
+            "description": entry.description,
+            "debit_account": entry.debit_account,
+            "credit_account": entry.credit_account,
+            "debit_amount": entry.debit_amount,
+            "credit_amount": entry.credit_amount,
+            "reference": entry.reference or "",
+            "status": "Draft",
+            "created_by": "Current User"  # TODO: Get from auth token
+        }
+        
+        # Save to database
+        created_entry = await create_document("general_journal", entry_data)
+        
+        # Get account names for response
+        debit_account_name = debit_account.get("account_name", "")
+        credit_account_name = credit_account.get("account_name", "")
+        
+        # Return in GeneralJournalEntry model format
+        return GeneralJournalEntry(
+            id=created_entry.get("id", ""),
+            entry_number=created_entry.get("entry_number", ""),
+            entry_date=created_entry.get("entry_date", ""),
+            description=created_entry.get("description", ""),
+            debit_account=debit_account_name or entry.debit_account,
+            credit_account=credit_account_name or entry.credit_account,
+            debit_amount=created_entry.get("debit_amount", 0.0),
+            credit_amount=created_entry.get("credit_amount", 0.0),
+            reference=created_entry.get("reference", ""),
+            status=created_entry.get("status", "Draft"),
+            created_by=created_entry.get("created_by", ""),
+            created_at=created_entry.get("created_at", datetime.utcnow()).isoformat() if isinstance(created_entry.get("created_at"), datetime) else created_entry.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error creating general journal entry: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error creating general journal entry: {str(e)}")
 
 
 @api_router.get("/general-journal/{entry_id}", response_model=GeneralJournalEntry)
 async def get_general_journal_entry(entry_id: str):
-    example = {
-        "id": "JE-001",
-        "entry_number": "JE-2024-001",
-        "entry_date": "2024-01-20",
-        "description": "Sales Revenue",
-        "debit_account": "Cash",
-        "credit_account": "Sales Revenue",
-        "debit_amount": 15000000.0,
-        "credit_amount": 15000000.0,
-        "reference": "INV-001",
-        "status": "Posted",
-        "created_by": "Accountant",
-        "created_at": "2024-01-20 10:30:00"
-    }
-    if entry_id != "JE-001":
-        raise HTTPException(status_code=404, detail="Journal entry not found")
-    return example
+    """Get general journal entry by ID"""
+    try:
+        entry = await get_document("general_journal", entry_id)
+        if not entry:
+            raise HTTPException(status_code=404, detail="Journal entry not found")
+        
+        # Get account names
+        debit_account_id = entry.get("debit_account", "")
+        credit_account_id = entry.get("credit_account", "")
+        
+        debit_account_name = ""
+        credit_account_name = ""
+        
+        if debit_account_id:
+            debit_acc = await get_document("chart_of_accounts", debit_account_id)
+            if debit_acc:
+                debit_account_name = debit_acc.get("account_name", "")
+        
+        if credit_account_id:
+            credit_acc = await get_document("chart_of_accounts", credit_account_id)
+            if credit_acc:
+                credit_account_name = credit_acc.get("account_name", "")
+        
+        # Return in GeneralJournalEntry model format
+        return GeneralJournalEntry(
+            id=entry.get("id", ""),
+            entry_number=entry.get("entry_number", ""),
+            entry_date=entry.get("entry_date", ""),
+            description=entry.get("description", ""),
+            debit_account=debit_account_name or debit_account_id,
+            credit_account=credit_account_name or credit_account_id,
+            debit_amount=entry.get("debit_amount", 0.0),
+            credit_amount=entry.get("credit_amount", 0.0),
+            reference=entry.get("reference", ""),
+            status=entry.get("status", "Draft"),
+            created_by=entry.get("created_by", ""),
+            created_at=entry.get("created_at", datetime.utcnow()).isoformat() if isinstance(entry.get("created_at"), datetime) else entry.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error fetching general journal entry: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching general journal entry: {str(e)}")
 
 
 @api_router.put("/general-journal/{entry_id}", response_model=GeneralJournalEntry)
 async def update_general_journal_entry(entry_id: str, entry: GeneralJournalEntryCreate):
-    updated = GeneralJournalEntry(
-        id=entry_id,
-        entry_number=f"JE-2024-{entry_id}",
-        entry_date=entry.entry_date,
-        description=entry.description,
-        debit_account=entry.debit_account,
-        credit_account=entry.credit_account,
-        debit_amount=entry.debit_amount,
-        credit_amount=entry.credit_amount,
-        reference=entry.reference,
-        status="Draft",
-        created_by="Current User",
-        created_at=datetime.utcnow().isoformat(),
-    )
-    return updated
+    """Update general journal entry"""
+    try:
+        # Check if entry exists
+        existing = await get_document("general_journal", entry_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Journal entry not found")
+        
+        # Can't update if already posted
+        if existing.get("status") == "Posted":
+            raise HTTPException(status_code=400, detail="Cannot update posted journal entry")
+        
+        # Validate amounts
+        if entry.debit_amount != entry.credit_amount:
+            raise HTTPException(status_code=400, detail="Debit and credit amounts must be equal")
+        
+        # Validate accounts
+        debit_account = await get_document("chart_of_accounts", entry.debit_account)
+        if not debit_account:
+            raise HTTPException(status_code=404, detail="Debit account not found")
+        
+        credit_account = await get_document("chart_of_accounts", entry.credit_account)
+        if not credit_account:
+            raise HTTPException(status_code=404, detail="Credit account not found")
+        
+        # Prepare update data
+        update_data = {
+            "entry_date": entry.entry_date,
+            "description": entry.description,
+            "debit_account": entry.debit_account,
+            "credit_account": entry.credit_account,
+            "debit_amount": entry.debit_amount,
+            "credit_amount": entry.credit_amount,
+            "reference": entry.reference or ""
+        }
+        
+        # Update in database
+        updated_entry = await update_document("general_journal", entry_id, update_data)
+        if not updated_entry:
+            raise HTTPException(status_code=500, detail="Failed to update journal entry")
+        
+        # Get account names
+        debit_account_name = debit_account.get("account_name", "")
+        credit_account_name = credit_account.get("account_name", "")
+        
+        # Return in GeneralJournalEntry model format
+        return GeneralJournalEntry(
+            id=updated_entry.get("id", ""),
+            entry_number=updated_entry.get("entry_number", ""),
+            entry_date=updated_entry.get("entry_date", ""),
+            description=updated_entry.get("description", ""),
+            debit_account=debit_account_name or entry.debit_account,
+            credit_account=credit_account_name or entry.credit_account,
+            debit_amount=updated_entry.get("debit_amount", 0.0),
+            credit_amount=updated_entry.get("credit_amount", 0.0),
+            reference=updated_entry.get("reference", ""),
+            status=updated_entry.get("status", "Draft"),
+            created_by=updated_entry.get("created_by", ""),
+            created_at=updated_entry.get("created_at", datetime.utcnow()).isoformat() if isinstance(updated_entry.get("created_at"), datetime) else updated_entry.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error updating general journal entry: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating general journal entry: {str(e)}")
 
 
 @api_router.delete("/general-journal/{entry_id}")
 async def delete_general_journal_entry(entry_id: str):
-    return {"message": "Journal entry deleted"}
+    """Delete general journal entry"""
+    try:
+        # Check if entry exists
+        existing = await get_document("general_journal", entry_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Journal entry not found")
+        
+        # Can't delete if already posted
+        if existing.get("status") == "Posted":
+            raise HTTPException(status_code=400, detail="Cannot delete posted journal entry. Reverse it instead.")
+        
+        # Delete from database
+        deleted = await delete_document("general_journal", entry_id)
+        if not deleted:
+            raise HTTPException(status_code=500, detail="Failed to delete journal entry")
+        
+        return {"message": "Journal entry deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error deleting general journal entry: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error deleting general journal entry: {str(e)}")
+
+@api_router.put("/general-journal/{entry_id}/post")
+async def post_general_journal_entry(entry_id: str):
+    """Post journal entry and update account balances"""
+    try:
+        # Get entry
+        entry = await get_document("general_journal", entry_id)
+        if not entry:
+            raise HTTPException(status_code=404, detail="Journal entry not found")
+        
+        if entry.get("status") == "Posted":
+            raise HTTPException(status_code=400, detail="Journal entry already posted")
+        
+        # Get accounts
+        debit_account = await get_document("chart_of_accounts", entry.get("debit_account", ""))
+        credit_account = await get_document("chart_of_accounts", entry.get("credit_account", ""))
+        
+        if not debit_account or not credit_account:
+            raise HTTPException(status_code=404, detail="Account not found")
+        
+        # Update account balances based on normal balance
+        debit_amount = entry.get("debit_amount", 0.0)
+        credit_amount = entry.get("credit_amount", 0.0)
+        
+        # Debit account: increase if normal balance is Debit, decrease if Credit
+        debit_normal = debit_account.get("normal_balance", "Debit")
+        debit_current_balance = debit_account.get("balance", 0.0)
+        if debit_normal == "Debit":
+            debit_new_balance = debit_current_balance + debit_amount
+        else:
+            debit_new_balance = debit_current_balance - debit_amount
+        
+        # Credit account: increase if normal balance is Credit, decrease if Debit
+        credit_normal = credit_account.get("normal_balance", "Credit")
+        credit_current_balance = credit_account.get("balance", 0.0)
+        if credit_normal == "Credit":
+            credit_new_balance = credit_current_balance + credit_amount
+        else:
+            credit_new_balance = credit_current_balance - credit_amount
+        
+        # Update account balances
+        await update_document("chart_of_accounts", entry.get("debit_account", ""), {"balance": debit_new_balance})
+        await update_document("chart_of_accounts", entry.get("credit_account", ""), {"balance": credit_new_balance})
+        
+        # Update entry status to Posted
+        updated_entry = await update_document("general_journal", entry_id, {"status": "Posted"})
+        
+        return {
+            "message": "Journal entry posted successfully",
+            "entry": {
+                "id": updated_entry.get("id", ""),
+                "entry_number": updated_entry.get("entry_number", ""),
+                "status": updated_entry.get("status", "")
+            },
+            "account_balances": {
+                "debit_account": {
+                    "id": entry.get("debit_account", ""),
+                    "name": debit_account.get("account_name", ""),
+                    "old_balance": debit_current_balance,
+                    "new_balance": debit_new_balance
+                },
+                "credit_account": {
+                    "id": entry.get("credit_account", ""),
+                    "name": credit_account.get("account_name", ""),
+                    "old_balance": credit_current_balance,
+                    "new_balance": credit_new_balance
+                }
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error posting general journal entry: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error posting general journal entry: {str(e)}")
 
 
 # =============================
