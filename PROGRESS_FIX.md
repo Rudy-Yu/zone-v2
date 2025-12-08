@@ -43,26 +43,128 @@
 - ✅ GET /api/products/search - Search dengan database
 - ✅ GET /api/products/{id} (auto-fill) - Database integration
 
+### 7. ✅ Vendor Management
+- ✅ GET /api/vendors - Database integration
+- ✅ POST /api/vendors - Create dengan email validation
+- ✅ GET /api/vendors/{id} - Get by ID
+- ✅ PUT /api/vendors/{id} - Update dengan validation
+- ✅ DELETE /api/vendors/{id} - Delete dengan check dependencies
+- ✅ GET /api/vendors/search - Search dengan database
+
+### 8. ✅ Sales Order
+- ✅ GET /api/sales-orders - Database integration
+- ✅ POST /api/sales-orders - Create dengan:
+  - ✅ Customer validation
+  - ✅ Product validation
+  - ✅ Auto-generate order number (SO-YYYY-XXXXXX)
+  - ✅ Auto-calculate total
+  - ✅ Auto-fill product names
+- ✅ GET /api/sales-orders/{id} - Get by ID
+- ✅ PUT /api/sales-orders/{id} - Update (hanya Draft)
+- ✅ PUT /api/sales-orders/{id}/status - Update status dengan:
+  - ✅ Status transition validation
+  - ✅ Stock management (reserve saat Confirmed)
+  - ✅ Stock restoration (saat Cancelled)
+- ✅ DELETE /api/sales-orders/{id} - Delete (hanya Draft/Cancelled)
+
+### 9. ✅ Sales Invoice ⭐ **BARU**
+- ✅ GET /api/sales-invoices - Database integration + overdue detection
+- ✅ POST /api/sales-invoices - Create dengan:
+  - ✅ Customer validation
+  - ✅ Product validation
+  - ✅ Auto-generate invoice number (INV-YYYY-XXXXXX)
+  - ✅ Auto-calculate total
+- ✅ GET /api/sales-invoices/{id} - Get by ID + overdue check
+- ✅ PUT /api/sales-invoices/{id} - Update (hanya jika belum Paid)
+- ✅ PUT /api/sales-invoices/{id}/status - Update status dengan:
+  - ✅ Status transition validation
+  - ✅ Auto-create journal entry saat Posting (Draft → Pending)
+  - ✅ Update account balances (AR & Sales Revenue)
+  - ✅ Record payment saat Paid
+  - ✅ Update customer total_purchases dan last_purchase
+  - ✅ Create payment journal entry
+- ✅ DELETE /api/sales-invoices/{id} - Delete (hanya jika belum Paid)
+
+### 10. ✅ Quotation
+- ✅ GET /api/quotations - Database integration + expiry detection
+- ✅ POST /api/quotations - Create dengan:
+  - ✅ Customer validation
+  - ✅ Product validation
+  - ✅ Auto-generate quotation number (QUO-YYYY-XXXXXX)
+  - ✅ Auto-calculate total
+- ✅ GET /api/quotations/{id} - Get by ID + expiry check
+- ✅ PUT /api/quotations/{id} - Update (hanya jika belum Accepted/Rejected/Expired)
+- ✅ PUT /api/quotations/{id}/status - Update status dengan:
+  - ✅ Status transition validation
+  - ✅ Auto-set sent_date saat Sent
+  - ✅ Auto-set accepted_date saat Accepted
+- ✅ POST /api/quotations/{id}/convert-to-order - Convert ke Sales Order
+  - ✅ Validasi quotation status = Accepted
+  - ✅ Create sales order dari quotation
+  - ✅ Link quotation ke sales order
+- ✅ DELETE /api/quotations/{id} - Delete (hanya jika belum converted)
+
+### 11. ✅ Purchase Order ⭐ **BARU**
+- ✅ GET /api/purchase-orders - Database integration
+- ✅ POST /api/purchase-orders - Create dengan:
+  - ✅ Vendor validation
+  - ✅ Product validation (atau create jika baru)
+  - ✅ Auto-generate order number (PO-YYYY-XXXXXX)
+  - ✅ Auto-calculate total
+- ✅ GET /api/purchase-orders/{id} - Get by ID
+- ✅ PUT /api/purchase-orders/{id} - Update (hanya Draft)
+- ✅ PUT /api/purchase-orders/{id}/status - Update status dengan:
+  - ✅ Status transition validation
+  - ✅ Stock management (increase saat Received)
+  - ✅ Auto-create product jika belum ada
+- ✅ DELETE /api/purchase-orders/{id} - Delete (hanya Draft/Cancelled)
+
+### 12. ✅ Purchase Invoice ⭐ **BARU**
+- ✅ GET /api/purchase-invoices - Database integration + overdue detection
+- ✅ POST /api/purchase-invoices - Create dengan:
+  - ✅ Vendor validation
+  - ✅ Auto-generate invoice number (PINV-YYYY-XXXXXX)
+- ✅ GET /api/purchase-invoices/{id} - Get by ID + overdue check
+- ✅ PUT /api/purchase-invoices/{id} - Update (hanya jika belum Paid)
+- ✅ PUT /api/purchase-invoices/{id}/status - Update status dengan:
+  - ✅ Status transition validation
+  - ✅ Auto-create journal entry saat Pending (Accounting integration)
+  - ✅ Update account balances (AP & Purchase Expense)
+  - ✅ Record payment saat Paid
+  - ✅ Create payment journal entry
+- ✅ DELETE /api/purchase-invoices/{id} - Delete (hanya jika belum Paid)
+
+### 13. ✅ Stock Opname ⭐ **BARU**
+- ✅ GET /api/stock-opnames - Database integration
+- ✅ POST /api/stock-opnames - Create dengan:
+  - ✅ Product validation
+  - ✅ Auto-get system quantity
+  - ✅ Auto-calculate variance
+  - ✅ Auto-generate opname number (OPN-YYYY-XXXXXX)
+- ✅ GET /api/stock-opnames/{id} - Get by ID
+- ✅ PUT /api/stock-opnames/{id} - Update (hanya jika belum Completed)
+- ✅ PUT /api/stock-opnames/{id}/complete - Complete dan adjust stock
+  - ✅ Update stock untuk semua products dengan variance
+- ✅ DELETE /api/stock-opnames/{id} - Delete (hanya jika belum Completed)
+
+### 14. ✅ Stock Transfer ⭐ **BARU**
+- ✅ GET /api/stock-transfers - Database integration
+- ✅ POST /api/stock-transfers - Create dengan:
+  - ✅ Product validation
+  - ✅ Stock availability validation
+  - ✅ Auto-generate transfer number (STR-YYYY-XXXXXX)
+  - ✅ Auto-calculate total value
+- ✅ GET /api/stock-transfers/{id} - Get by ID
+- ✅ PUT /api/stock-transfers/{id} - Update (hanya jika belum Completed)
+- ✅ PUT /api/stock-transfers/{id}/complete - Complete transfer dan update stock
+  - ✅ Decrease stock dari source warehouse
+- ✅ DELETE /api/stock-transfers/{id} - Delete (hanya jika belum Completed)
+
 ---
 
 ## 🔄 MODUL YANG SEDANG DIPERBAIKI
 
-### 7. ⏳ Vendor Management
-- ⏳ GET /api/vendors
-- ⏳ POST /api/vendors
-- ⏳ GET /api/vendors/{id}
-- ⏳ PUT /api/vendors/{id}
-- ⏳ DELETE /api/vendors/{id}
-- ⏳ GET /api/vendors/search
-
----
-
-## ⏳ MODUL YANG BELUM DIPERBAIKI
-
-### Sales Module
-- ⏳ Sales Order
-- ⏳ Sales Invoice
-- ⏳ Quotation
+### 15. ⏳ Production Order
 
 ### Purchase Module
 - ⏳ Purchase Order
@@ -102,9 +204,39 @@
 3. Search endpoints sudah menggunakan database queries
 4. Validation sudah ditambahkan (email unique, SKU unique, dll)
 5. Error handling sudah ditambahkan
+6. **Sales Order sudah memiliki stock management** - stock otomatis berkurang saat order confirmed
+
+---
+
+## 🧪 TESTING
+
+Setiap modul yang selesai memiliki file testing:
+- `TEST_SALES_ORDER.md` - Panduan testing Sales Order
+- `TEST_SALES_INVOICE.md` - Panduan testing Sales Invoice
+- `TEST_QUOTATION.md` - Panduan testing Quotation
+- `TEST_PURCHASE_ORDER.md` - Panduan testing Purchase Order
+- `TEST_PURCHASE_INVOICE.md` - Panduan testing Purchase Invoice
+- `TEST_STOCK_OPNAME.md` - Panduan testing Stock Opname
+- `TEST_STOCK_TRANSFER.md` - Panduan testing Stock Transfer
+
+---
+
+## 📊 SUMMARY
+
+**Total Modul Selesai**: 14 modul
+- ✅ Database Helper
+- ✅ Authentication
+- ✅ Customer Management
+- ✅ User Management
+- ✅ Products
+- ✅ Vendor Management
+- ✅ Sales Order (dengan stock management)
+- ✅ Sales Invoice (dengan accounting integration)
+- ✅ Quotation (dengan convert to order)
+- ✅ Settings (sudah ada sebelumnya)
+
+**Progress**: ~70% dari total modul
 
 ---
 
 *Last Updated: 2024-01-20*
-
-

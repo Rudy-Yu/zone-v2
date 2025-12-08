@@ -779,123 +779,451 @@ async def delete_customer(customer_id: str):
 @api_router.get("/sales-invoices", response_model=List[SalesInvoice])
 async def get_sales_invoices():
     """Get all sales invoices"""
-    # Mock data for now - in production, this would come from database
-    invoices = [
-        {
-            "id": "INV-001",
-            "customer_id": "CUST-001",
-            "customer_name": "PT. ABC Indonesia",
-            "invoice_date": "2024-01-20",
-            "due_date": "2024-02-19",
-            "amount": 15000000,
-            "status": "Paid",
-            "items": [
-                {"product_id": "PRD-001", "product_name": "Laptop Gaming", "quantity": 1, "unit_price": 15000000, "total": 15000000}
-            ],
-            "created_by": "John Sales",
-            "created_at": "2024-01-20 10:30:00"
-        },
-        {
-            "id": "INV-002",
-            "customer_id": "CUST-002",
-            "customer_name": "CV. XYZ Trading",
-            "invoice_date": "2024-01-19",
-            "due_date": "2024-02-18",
-            "amount": 8500000,
-            "status": "Pending",
-            "items": [
-                {"product_id": "PRD-002", "product_name": "Mouse Wireless", "quantity": 5, "unit_price": 250000, "total": 1250000},
-                {"product_id": "PRD-003", "product_name": "Keyboard Mechanical", "quantity": 3, "unit_price": 1200000, "total": 3600000}
-            ],
-            "created_by": "Jane Sales",
-            "created_at": "2024-01-19 14:15:00"
-        },
-        {
-            "id": "INV-003",
-            "customer_id": "CUST-003",
-            "customer_name": "Toko Maju Jaya",
-            "invoice_date": "2024-01-18",
-            "due_date": "2024-02-17",
-            "amount": 22100000,
-            "status": "Overdue",
-            "items": [
-                {"product_id": "PRD-001", "product_name": "Laptop Gaming", "quantity": 1, "unit_price": 15000000, "total": 15000000},
-                {"product_id": "PRD-004", "product_name": "Monitor 27\"", "quantity": 2, "unit_price": 3500000, "total": 7000000}
-            ],
-            "created_by": "Bob Sales",
-            "created_at": "2024-01-18 09:45:00"
-        }
-    ]
-    return invoices
+    try:
+        invoices_data = await get_documents("sales_invoices", sort=[("created_at", -1)])
+        
+        # Check for overdue invoices
+        today = datetime.utcnow().date()
+        for invoice in invoices_data:
+            if invoice.get("status") == "Pending":
+                due_date_str = invoice.get("due_date", "")
+                if due_date_str:
+                    try:
+                        due_date = datetime.strptime(due_date_str, "%Y-%m-%d").date()
+                        if due_date < today:
+                            # Update status to Overdue
+                            await update_document("sales_invoices", invoice.get("id"), {"status": "Overdue"})
+                            invoice["status"] = "Overdue"
+                    except:
+                        pass
+        
+        # Convert to SalesInvoice model format
+        invoices = []
+        for inv in invoices_data:
+            invoices.append({
+                "id": inv.get("id", ""),
+                "customer_id": inv.get("customer_id", ""),
+                "customer_name": inv.get("customer_name", ""),
+                "invoice_date": inv.get("invoice_date", ""),
+                "due_date": inv.get("due_date", ""),
+                "amount": inv.get("amount", 0.0),
+                "status": inv.get("status", "Draft"),
+                "items": inv.get("items", []),
+                "created_by": inv.get("created_by", ""),
+                "created_at": inv.get("created_at", datetime.utcnow()).isoformat() if isinstance(inv.get("created_at"), datetime) else inv.get("created_at", "")
+            })
+        
+        return invoices
+    except Exception as e:
+        logging.error(f"Error fetching sales invoices: {str(e)}")
+        return []
 
 @api_router.post("/sales-invoices", response_model=SalesInvoice)
 async def create_sales_invoice(invoice: SalesInvoiceCreate):
     """Create a new sales invoice"""
-    new_invoice = SalesInvoice(
-        id=f"INV-{str(uuid.uuid4())[:8].upper()}",
-        customer_id=invoice.customer_id,
-        customer_name="",  # Will be populated from customer data
-        invoice_date=invoice.invoice_date,
-        due_date=invoice.due_date,
-        amount=sum(item.get('total', 0) for item in invoice.items),
-        status="Draft",
-        items=invoice.items,
-        created_by="Current User",
-        created_at=datetime.utcnow().isoformat()
-    )
-    # In production, save to database
-    return new_invoice
+    try:
+        # Validate customer exists
+        customer = await get_document("customers", invoice.customer_id)
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        
+        # Validate products and calculate total
+        total_amount = 0
+        for item in invoice.items:
+            product_id = item.get("product_id")
+            if not product_id:
+                raise HTTPException(status_code=400, detail="Product ID is required for all items")
+            
+            product = await get_document("products", product_id)
+            if not product:
+                raise HTTPException(status_code=404, detail=f"Product {product_id} not found")
+            
+            # Calculate item total if not provided
+            if "total" not in item or item["total"] == 0:
+                unit_price = item.get("unit_price", product.get("price", 0))
+                quantity = item.get("quantity", 0)
+                item["total"] = unit_price * quantity
+                item["unit_price"] = unit_price
+            
+            # Add product name if not provided
+            if "product_name" not in item:
+                item["product_name"] = product.get("name", "")
+            
+            total_amount += item.get("total", 0)
+        
+        # Generate invoice number
+        year = datetime.utcnow().year
+        last_invoice = await db.sales_invoices.find_one(
+            {"invoice_number": {"$regex": f"^INV-{year}-"}},
+            sort=[("invoice_number", -1)]
+        )
+        
+        if last_invoice:
+            last_num = int(last_invoice.get("invoice_number", "0").split("-")[-1])
+            invoice_number = f"INV-{year}-{str(last_num + 1).zfill(6)}"
+        else:
+            invoice_number = f"INV-{year}-000001"
+        
+        # Prepare invoice data
+        invoice_data = {
+            "invoice_number": invoice_number,
+            "customer_id": invoice.customer_id,
+            "customer_name": customer.get("name", ""),
+            "invoice_date": invoice.invoice_date,
+            "due_date": invoice.due_date,
+            "amount": total_amount,
+            "paid_amount": 0.0,
+            "status": "Draft",
+            "items": invoice.items,
+            "notes": invoice.notes or "",
+            "created_by": "Current User"  # TODO: Get from auth token
+        }
+        
+        # Save to database
+        created_invoice = await create_document("sales_invoices", invoice_data)
+        
+        # Auto-create journal entry if status is not Draft (for future use)
+        # This will be implemented when invoice is posted/confirmed
+        
+        # Return in SalesInvoice model format
+        return SalesInvoice(
+            id=created_invoice.get("id", ""),
+            customer_id=created_invoice.get("customer_id", ""),
+            customer_name=created_invoice.get("customer_name", ""),
+            invoice_date=created_invoice.get("invoice_date", ""),
+            due_date=created_invoice.get("due_date", ""),
+            amount=created_invoice.get("amount", 0.0),
+            status=created_invoice.get("status", "Draft"),
+            items=created_invoice.get("items", []),
+            created_by=created_invoice.get("created_by", ""),
+            created_at=created_invoice.get("created_at", datetime.utcnow()).isoformat() if isinstance(created_invoice.get("created_at"), datetime) else created_invoice.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error creating sales invoice: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error creating sales invoice: {str(e)}")
 
 @api_router.get("/sales-invoices/{invoice_id}", response_model=SalesInvoice)
 async def get_sales_invoice(invoice_id: str):
     """Get sales invoice by ID"""
-    # Mock data - in production, fetch from database
-    invoices = {
-        "INV-001": {
-            "id": "INV-001",
-            "customer_id": "CUST-001",
-            "customer_name": "PT. ABC Indonesia",
-            "invoice_date": "2024-01-20",
-            "due_date": "2024-02-19",
-            "amount": 15000000,
-            "status": "Paid",
-            "items": [
-                {"product_id": "PRD-001", "product_name": "Laptop Gaming", "quantity": 1, "unit_price": 15000000, "total": 15000000}
-            ],
-            "created_by": "John Sales",
-            "created_at": "2024-01-20 10:30:00"
-        }
-    }
-    
-    invoice = invoices.get(invoice_id)
-    if not invoice:
-        raise HTTPException(status_code=404, detail="Sales invoice not found")
-    
-    return invoice
+    try:
+        invoice = await get_document("sales_invoices", invoice_id)
+        if not invoice:
+            raise HTTPException(status_code=404, detail="Sales invoice not found")
+        
+        # Check if overdue
+        if invoice.get("status") == "Pending":
+            due_date_str = invoice.get("due_date", "")
+            if due_date_str:
+                try:
+                    due_date = datetime.strptime(due_date_str, "%Y-%m-%d").date()
+                    if due_date < datetime.utcnow().date():
+                        await update_document("sales_invoices", invoice_id, {"status": "Overdue"})
+                        invoice["status"] = "Overdue"
+                except:
+                    pass
+        
+        # Return in SalesInvoice model format
+        return SalesInvoice(
+            id=invoice.get("id", ""),
+            customer_id=invoice.get("customer_id", ""),
+            customer_name=invoice.get("customer_name", ""),
+            invoice_date=invoice.get("invoice_date", ""),
+            due_date=invoice.get("due_date", ""),
+            amount=invoice.get("amount", 0.0),
+            status=invoice.get("status", "Draft"),
+            items=invoice.get("items", []),
+            created_by=invoice.get("created_by", ""),
+            created_at=invoice.get("created_at", datetime.utcnow()).isoformat() if isinstance(invoice.get("created_at"), datetime) else invoice.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error fetching sales invoice: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching sales invoice: {str(e)}")
 
 @api_router.put("/sales-invoices/{invoice_id}", response_model=SalesInvoice)
 async def update_sales_invoice(invoice_id: str, invoice: SalesInvoiceCreate):
     """Update sales invoice"""
-    # In production, update in database
-    updated_invoice = SalesInvoice(
-        id=invoice_id,
-        customer_id=invoice.customer_id,
-        customer_name="",  # Will be populated from customer data
-        invoice_date=invoice.invoice_date,
-        due_date=invoice.due_date,
-        amount=sum(item.get('total', 0) for item in invoice.items),
-        status="Draft",
-        items=invoice.items,
-        created_by="Current User",
-        created_at=datetime.utcnow().isoformat()
-    )
-    return updated_invoice
+    try:
+        # Check if invoice exists
+        existing = await get_document("sales_invoices", invoice_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Sales invoice not found")
+        
+        # Can't update if already paid
+        if existing.get("status") == "Paid":
+            raise HTTPException(status_code=400, detail="Cannot update paid invoice")
+        
+        # Validate customer
+        customer = await get_document("customers", invoice.customer_id)
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        
+        # Validate products and calculate total
+        total_amount = 0
+        for item in invoice.items:
+            product_id = item.get("product_id")
+            if not product_id:
+                raise HTTPException(status_code=400, detail="Product ID is required for all items")
+            
+            product = await get_document("products", product_id)
+            if not product:
+                raise HTTPException(status_code=404, detail=f"Product {product_id} not found")
+            
+            if "total" not in item or item["total"] == 0:
+                unit_price = item.get("unit_price", product.get("price", 0))
+                quantity = item.get("quantity", 0)
+                item["total"] = unit_price * quantity
+                item["unit_price"] = unit_price
+            
+            if "product_name" not in item:
+                item["product_name"] = product.get("name", "")
+            
+            total_amount += item.get("total", 0)
+        
+        # Prepare update data
+        update_data = {
+            "customer_id": invoice.customer_id,
+            "customer_name": customer.get("name", ""),
+            "invoice_date": invoice.invoice_date,
+            "due_date": invoice.due_date,
+            "amount": total_amount,
+            "items": invoice.items,
+            "notes": invoice.notes or ""
+        }
+        
+        # Update in database
+        updated_invoice = await update_document("sales_invoices", invoice_id, update_data)
+        if not updated_invoice:
+            raise HTTPException(status_code=500, detail="Failed to update sales invoice")
+        
+        # Return in SalesInvoice model format
+        return SalesInvoice(
+            id=updated_invoice.get("id", ""),
+            customer_id=updated_invoice.get("customer_id", ""),
+            customer_name=updated_invoice.get("customer_name", ""),
+            invoice_date=updated_invoice.get("invoice_date", ""),
+            due_date=updated_invoice.get("due_date", ""),
+            amount=updated_invoice.get("amount", 0.0),
+            status=updated_invoice.get("status", "Draft"),
+            items=updated_invoice.get("items", []),
+            created_by=updated_invoice.get("created_by", ""),
+            created_at=updated_invoice.get("created_at", datetime.utcnow()).isoformat() if isinstance(updated_invoice.get("created_at"), datetime) else updated_invoice.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error updating sales invoice: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating sales invoice: {str(e)}")
 
 @api_router.delete("/sales-invoices/{invoice_id}")
 async def delete_sales_invoice(invoice_id: str):
     """Delete sales invoice"""
-    # In production, delete from database
-    return {"message": "Sales invoice deleted successfully"}
+    try:
+        # Check if invoice exists
+        existing = await get_document("sales_invoices", invoice_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Sales invoice not found")
+        
+        # Can't delete if already paid
+        if existing.get("status") == "Paid":
+            raise HTTPException(status_code=400, detail="Cannot delete paid invoice")
+        
+        # Delete from database
+        deleted = await delete_document("sales_invoices", invoice_id)
+        if not deleted:
+            raise HTTPException(status_code=500, detail="Failed to delete sales invoice")
+        
+        return {"message": "Sales invoice deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error deleting sales invoice: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error deleting sales invoice: {str(e)}")
+
+@api_router.put("/sales-invoices/{invoice_id}/status")
+async def update_sales_invoice_status(invoice_id: str, status_data: dict):
+    """Update sales invoice status"""
+    try:
+        new_status = status_data.get("status")
+        if not new_status:
+            raise HTTPException(status_code=400, detail="Status is required")
+        
+        # Get invoice
+        invoice = await get_document("sales_invoices", invoice_id)
+        if not invoice:
+            raise HTTPException(status_code=404, detail="Sales invoice not found")
+        
+        old_status = invoice.get("status", "Draft")
+        
+        # Status transitions
+        valid_transitions = {
+            "Draft": ["Pending", "Cancelled"],
+            "Pending": ["Paid", "Overdue", "Cancelled"],
+            "Overdue": ["Paid", "Cancelled"],
+            "Paid": [],
+            "Cancelled": []
+        }
+        
+        if new_status not in valid_transitions.get(old_status, []):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid status transition from {old_status} to {new_status}"
+            )
+        
+        # Handle status-specific logic
+        update_data = {"status": new_status}
+        
+        if new_status == "Pending" and old_status == "Draft":
+            # Post invoice - create journal entry
+            # Find or create Accounts Receivable account
+            ar_account = await find_one_document("chart_of_accounts", {"account_code": "1200"})
+            if not ar_account:
+                # Create default AR account if doesn't exist
+                ar_account_data = {
+                    "account_code": "1200",
+                    "account_name": "Accounts Receivable",
+                    "account_type": "Asset",
+                    "normal_balance": "Debit",
+                    "balance": 0.0,
+                    "status": "Active"
+                }
+                ar_account = await create_document("chart_of_accounts", ar_account_data)
+            
+            # Find or create Sales Revenue account
+            sales_account = await find_one_document("chart_of_accounts", {"account_code": "4000"})
+            if not sales_account:
+                sales_account_data = {
+                    "account_code": "4000",
+                    "account_name": "Sales Revenue",
+                    "account_type": "Revenue",
+                    "normal_balance": "Credit",
+                    "balance": 0.0,
+                    "status": "Active"
+                }
+                sales_account = await create_document("chart_of_accounts", sales_account_data)
+            
+            # Create journal entry
+            year = datetime.utcnow().year
+            last_entry = await db.general_journal.find_one(
+                {"entry_number": {"$regex": f"^JE-{year}-"}},
+                sort=[("entry_number", -1)]
+            )
+            
+            if last_entry:
+                last_num = int(last_entry.get("entry_number", "0").split("-")[-1])
+                entry_number = f"JE-{year}-{str(last_num + 1).zfill(6)}"
+            else:
+                entry_number = f"JE-{year}-000001"
+            
+            journal_entry = {
+                "entry_number": entry_number,
+                "entry_date": invoice.get("invoice_date", datetime.utcnow().strftime("%Y-%m-%d")),
+                "description": f"Sales Invoice {invoice.get('invoice_number', '')}",
+                "debit_account": ar_account.get("id", ""),
+                "credit_account": sales_account.get("id", ""),
+                "debit_amount": invoice.get("amount", 0.0),
+                "credit_amount": invoice.get("amount", 0.0),
+                "reference": invoice_id,
+                "status": "Posted",
+                "created_by": invoice.get("created_by", "")
+            }
+            
+            await create_document("general_journal", journal_entry)
+            
+            # Update account balances
+            await update_document("chart_of_accounts", ar_account.get("id"), {
+                "balance": ar_account.get("balance", 0.0) + invoice.get("amount", 0.0)
+            })
+            await update_document("chart_of_accounts", sales_account.get("id"), {
+                "balance": sales_account.get("balance", 0.0) + invoice.get("amount", 0.0)
+            })
+        
+        elif new_status == "Paid":
+            # Record payment
+            paid_amount = status_data.get("paid_amount", invoice.get("amount", 0.0))
+            update_data["paid_amount"] = paid_amount
+            
+            # Update customer total purchases
+            customer = await get_document("customers", invoice.get("customer_id"))
+            if customer:
+                new_total = customer.get("total_purchases", 0.0) + paid_amount
+                await update_document("customers", customer.get("id"), {
+                    "total_purchases": new_total,
+                    "last_purchase": datetime.utcnow().strftime("%Y-%m-%d")
+                })
+            
+            # Create payment journal entry
+            # Find Cash account
+            cash_account = await find_one_document("chart_of_accounts", {"account_code": "1110"})
+            if not cash_account:
+                cash_account_data = {
+                    "account_code": "1110",
+                    "account_name": "Cash",
+                    "account_type": "Asset",
+                    "normal_balance": "Debit",
+                    "balance": 0.0,
+                    "status": "Active"
+                }
+                cash_account = await create_document("chart_of_accounts", cash_account_data)
+            
+            # Find AR account
+            ar_account = await find_one_document("chart_of_accounts", {"account_code": "1200"})
+            if ar_account:
+                year = datetime.utcnow().year
+                last_entry = await db.general_journal.find_one(
+                    {"entry_number": {"$regex": f"^JE-{year}-"}},
+                    sort=[("entry_number", -1)]
+                )
+                
+                if last_entry:
+                    last_num = int(last_entry.get("entry_number", "0").split("-")[-1])
+                    entry_number = f"JE-{year}-{str(last_num + 1).zfill(6)}"
+                else:
+                    entry_number = f"JE-{year}-000001"
+                
+                payment_entry = {
+                    "entry_number": entry_number,
+                    "entry_date": datetime.utcnow().strftime("%Y-%m-%d"),
+                    "description": f"Payment for Invoice {invoice.get('invoice_number', '')}",
+                    "debit_account": cash_account.get("id", ""),
+                    "credit_account": ar_account.get("id", ""),
+                    "debit_amount": paid_amount,
+                    "credit_amount": paid_amount,
+                    "reference": invoice_id,
+                    "status": "Posted",
+                    "created_by": invoice.get("created_by", "")
+                }
+                
+                await create_document("general_journal", payment_entry)
+                
+                # Update account balances
+                await update_document("chart_of_accounts", cash_account.get("id"), {
+                    "balance": cash_account.get("balance", 0.0) + paid_amount
+                })
+                await update_document("chart_of_accounts", ar_account.get("id"), {
+                    "balance": ar_account.get("balance", 0.0) - paid_amount
+                })
+        
+        # Update invoice status
+        updated_invoice = await update_document("sales_invoices", invoice_id, update_data)
+        
+        return {
+            "message": f"Invoice status updated from {old_status} to {new_status}",
+            "invoice": {
+                "id": updated_invoice.get("id", ""),
+                "invoice_number": updated_invoice.get("invoice_number", ""),
+                "status": updated_invoice.get("status", ""),
+                "paid_amount": updated_invoice.get("paid_amount", 0.0)
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error updating sales invoice status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating sales invoice status: {str(e)}")
 
 # Sales Order Endpoints
 @api_router.get("/sales-orders", response_model=List[SalesOrder])
@@ -943,88 +1271,718 @@ async def get_sales_orders():
 @api_router.post("/sales-orders", response_model=SalesOrder)
 async def create_sales_order(order: SalesOrderCreate):
     """Create a new sales order"""
-    new_order = SalesOrder(
-        id=f"SO-{str(uuid.uuid4())[:8].upper()}",
-        order_number=f"SO-2024-{str(uuid.uuid4())[:8].upper()}",
-        customer_id=order.customer_id,
-        customer_name=order.customer_name,
-        order_date=order.order_date,
-        delivery_date=order.delivery_date,
-        status="Draft",
-        total_amount=sum(item.get('total', 0) for item in order.items),
-        items=order.items,
-        created_by="Current User",
-        notes=order.notes,
-        created_at=datetime.utcnow().isoformat()
-    )
-    # In production, save to database
-    return new_order
+    try:
+        # Validate customer exists
+        customer = await get_document("customers", order.customer_id)
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        
+        # Validate products and check stock
+        total_amount = 0
+        for item in order.items:
+            product_id = item.get("product_id")
+            quantity = item.get("quantity", 0)
+            
+            if not product_id:
+                raise HTTPException(status_code=400, detail="Product ID is required for all items")
+            
+            # Get product details
+            product = await get_document("products", product_id)
+            if not product:
+                raise HTTPException(status_code=404, detail=f"Product {product_id} not found")
+            
+            # Check stock if order is not Draft
+            if order.status != "Draft" and product.get("stock", 0) < quantity:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Insufficient stock for product {product.get('name', product_id)}. Available: {product.get('stock', 0)}, Required: {quantity}"
+                )
+            
+            # Calculate item total if not provided
+            if "total" not in item or item["total"] == 0:
+                unit_price = item.get("unit_price", product.get("price", 0))
+                item["total"] = unit_price * quantity
+                item["unit_price"] = unit_price
+            
+            # Add product name if not provided
+            if "product_name" not in item:
+                item["product_name"] = product.get("name", "")
+            
+            total_amount += item.get("total", 0)
+        
+        # Generate order number
+        year = datetime.utcnow().year
+        last_order = await db.sales_orders.find_one(
+            {"order_number": {"$regex": f"^SO-{year}-"}},
+            sort=[("order_number", -1)]
+        )
+        
+        if last_order:
+            last_num = int(last_order.get("order_number", "0").split("-")[-1])
+            order_number = f"SO-{year}-{str(last_num + 1).zfill(6)}"
+        else:
+            order_number = f"SO-{year}-000001"
+        
+        # Prepare order data
+        order_data = {
+            "order_number": order_number,
+            "customer_id": order.customer_id,
+            "customer_name": order.customer_name or customer.get("name", ""),
+            "order_date": order.order_date,
+            "delivery_date": order.delivery_date,
+            "status": "Draft",
+            "total_amount": total_amount,
+            "items": order.items,
+            "created_by": "Current User",  # TODO: Get from auth token
+            "notes": order.notes or ""
+        }
+        
+        # Save to database
+        created_order = await create_document("sales_orders", order_data)
+        
+        # Return in SalesOrder model format
+        return SalesOrder(
+            id=created_order.get("id", ""),
+            order_number=created_order.get("order_number", ""),
+            customer_id=created_order.get("customer_id", ""),
+            customer_name=created_order.get("customer_name", ""),
+            order_date=created_order.get("order_date", ""),
+            delivery_date=created_order.get("delivery_date", ""),
+            status=created_order.get("status", "Draft"),
+            total_amount=created_order.get("total_amount", 0.0),
+            items=created_order.get("items", []),
+            created_by=created_order.get("created_by", ""),
+            notes=created_order.get("notes", ""),
+            created_at=created_order.get("created_at", datetime.utcnow()).isoformat() if isinstance(created_order.get("created_at"), datetime) else created_order.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error creating sales order: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error creating sales order: {str(e)}")
+
+@api_router.get("/sales-orders/{order_id}", response_model=SalesOrder)
+async def get_sales_order(order_id: str):
+    """Get sales order by ID"""
+    try:
+        order = await get_document("sales_orders", order_id)
+        if not order:
+            raise HTTPException(status_code=404, detail="Sales order not found")
+        
+        # Return in SalesOrder model format
+        return SalesOrder(
+            id=order.get("id", ""),
+            order_number=order.get("order_number", ""),
+            customer_id=order.get("customer_id", ""),
+            customer_name=order.get("customer_name", ""),
+            order_date=order.get("order_date", ""),
+            delivery_date=order.get("delivery_date", ""),
+            status=order.get("status", "Draft"),
+            total_amount=order.get("total_amount", 0.0),
+            items=order.get("items", []),
+            created_by=order.get("created_by", ""),
+            notes=order.get("notes", ""),
+            created_at=order.get("created_at", datetime.utcnow()).isoformat() if isinstance(order.get("created_at"), datetime) else order.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error fetching sales order: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching sales order: {str(e)}")
+
+@api_router.put("/sales-orders/{order_id}", response_model=SalesOrder)
+async def update_sales_order(order_id: str, order: SalesOrderCreate):
+    """Update sales order"""
+    try:
+        # Check if order exists
+        existing = await get_document("sales_orders", order_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Sales order not found")
+        
+        # Can't update if already confirmed/processing/shipped/delivered
+        if existing.get("status") in ["Confirmed", "Processing", "Shipped", "Delivered"]:
+            raise HTTPException(status_code=400, detail=f"Cannot update order with status: {existing.get('status')}")
+        
+        # Validate customer
+        customer = await get_document("customers", order.customer_id)
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        
+        # Validate products and calculate total
+        total_amount = 0
+        for item in order.items:
+            product_id = item.get("product_id")
+            if not product_id:
+                raise HTTPException(status_code=400, detail="Product ID is required for all items")
+            
+            product = await get_document("products", product_id)
+            if not product:
+                raise HTTPException(status_code=404, detail=f"Product {product_id} not found")
+            
+            if "total" not in item or item["total"] == 0:
+                unit_price = item.get("unit_price", product.get("price", 0))
+                quantity = item.get("quantity", 0)
+                item["total"] = unit_price * quantity
+                item["unit_price"] = unit_price
+            
+            if "product_name" not in item:
+                item["product_name"] = product.get("name", "")
+            
+            total_amount += item.get("total", 0)
+        
+        # Prepare update data
+        update_data = {
+            "customer_id": order.customer_id,
+            "customer_name": order.customer_name or customer.get("name", ""),
+            "order_date": order.order_date,
+            "delivery_date": order.delivery_date,
+            "total_amount": total_amount,
+            "items": order.items,
+            "notes": order.notes or ""
+        }
+        
+        # Update in database
+        updated_order = await update_document("sales_orders", order_id, update_data)
+        if not updated_order:
+            raise HTTPException(status_code=500, detail="Failed to update sales order")
+        
+        # Return in SalesOrder model format
+        return SalesOrder(
+            id=updated_order.get("id", ""),
+            order_number=updated_order.get("order_number", ""),
+            customer_id=updated_order.get("customer_id", ""),
+            customer_name=updated_order.get("customer_name", ""),
+            order_date=updated_order.get("order_date", ""),
+            delivery_date=updated_order.get("delivery_date", ""),
+            status=updated_order.get("status", "Draft"),
+            total_amount=updated_order.get("total_amount", 0.0),
+            items=updated_order.get("items", []),
+            created_by=updated_order.get("created_by", ""),
+            notes=updated_order.get("notes", ""),
+            created_at=updated_order.get("created_at", datetime.utcnow()).isoformat() if isinstance(updated_order.get("created_at"), datetime) else updated_order.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error updating sales order: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating sales order: {str(e)}")
+
+@api_router.put("/sales-orders/{order_id}/status")
+async def update_sales_order_status(order_id: str, status_data: dict):
+    """Update sales order status with stock management"""
+    try:
+        new_status = status_data.get("status")
+        if not new_status:
+            raise HTTPException(status_code=400, detail="Status is required")
+        
+        # Get order
+        order = await get_document("sales_orders", order_id)
+        if not order:
+            raise HTTPException(status_code=404, detail="Sales order not found")
+        
+        old_status = order.get("status", "Draft")
+        
+        # Status transitions
+        valid_transitions = {
+            "Draft": ["Confirmed", "Cancelled"],
+            "Confirmed": ["Processing", "Cancelled"],
+            "Processing": ["Shipped", "Cancelled"],
+            "Shipped": ["Delivered", "Cancelled"],
+            "Delivered": [],
+            "Cancelled": []
+        }
+        
+        if new_status not in valid_transitions.get(old_status, []):
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid status transition from {old_status} to {new_status}"
+            )
+        
+        # Handle stock updates
+        if new_status == "Confirmed" and old_status == "Draft":
+            # Reserve stock (decrease available stock)
+            for item in order.get("items", []):
+                product_id = item.get("product_id")
+                quantity = item.get("quantity", 0)
+                
+                product = await get_document("products", product_id)
+                if not product:
+                    raise HTTPException(status_code=404, detail=f"Product {product_id} not found")
+                
+                current_stock = product.get("stock", 0)
+                if current_stock < quantity:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Insufficient stock for {product.get('name', product_id)}. Available: {current_stock}, Required: {quantity}"
+                    )
+                
+                # Update stock
+                new_stock = current_stock - quantity
+                await update_document("products", product_id, {"stock": new_stock})
+        
+        elif new_status == "Cancelled" and old_status in ["Confirmed", "Processing"]:
+            # Restore stock (increase available stock)
+            for item in order.get("items", []):
+                product_id = item.get("product_id")
+                quantity = item.get("quantity", 0)
+                
+                product = await get_document("products", product_id)
+                if product:
+                    current_stock = product.get("stock", 0)
+                    new_stock = current_stock + quantity
+                    await update_document("products", product_id, {"stock": new_stock})
+        
+        # Update order status
+        updated_order = await update_document("sales_orders", order_id, {"status": new_status})
+        
+        return {
+            "message": f"Order status updated from {old_status} to {new_status}",
+            "order": {
+                "id": updated_order.get("id", ""),
+                "order_number": updated_order.get("order_number", ""),
+                "status": updated_order.get("status", "")
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error updating sales order status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating sales order status: {str(e)}")
+
+@api_router.delete("/sales-orders/{order_id}")
+async def delete_sales_order(order_id: str):
+    """Delete sales order"""
+    try:
+        # Check if order exists
+        existing = await get_document("sales_orders", order_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Sales order not found")
+        
+        # Can't delete if already confirmed or beyond
+        if existing.get("status") not in ["Draft", "Cancelled"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot delete order with status: {existing.get('status')}. Cancel it first."
+            )
+        
+        # Delete from database
+        deleted = await delete_document("sales_orders", order_id)
+        if not deleted:
+            raise HTTPException(status_code=500, detail="Failed to delete sales order")
+        
+        return {"message": "Sales order deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error deleting sales order: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error deleting sales order: {str(e)}")
 
 # Quotation Endpoints
 @api_router.get("/quotations", response_model=List[Quotation])
 async def get_quotations():
     """Get all quotations"""
-    # Mock data for now - in production, this would come from database
-    quotations = [
-        {
-            "id": "QUO-001",
-            "quotation_number": "QUO-2024-001",
-            "customer_id": "CUST-001",
-            "customer_name": "PT. ABC Indonesia",
-            "quotation_date": "2024-01-20",
-            "valid_until": "2024-02-20",
-            "status": "Sent",
-            "total_amount": 45000000,
-            "items": [
-                {"product_id": "PRD-001", "product_name": "Laptop Gaming", "quantity": 2, "unit_price": 15000000, "total": 30000000},
-                {"product_id": "PRD-002", "product_name": "Mouse Wireless", "quantity": 5, "unit_price": 250000, "total": 1250000}
-            ],
-            "created_by": "John Sales",
-            "notes": "Valid for 30 days",
-            "created_at": "2024-01-20 10:30:00",
-            "sent_date": "2024-01-20 14:00:00"
-        },
-        {
-            "id": "QUO-002",
-            "quotation_number": "QUO-2024-002",
-            "customer_id": "CUST-002",
-            "customer_name": "CV. XYZ Trading",
-            "quotation_date": "2024-01-19",
-            "valid_until": "2024-02-19",
-            "status": "Accepted",
-            "total_amount": 28000000,
-            "items": [
-                {"product_id": "PRD-003", "product_name": "Keyboard Mechanical", "quantity": 10, "unit_price": 1200000, "total": 12000000},
-                {"product_id": "PRD-004", "product_name": "Monitor 27\"", "quantity": 8, "unit_price": 2000000, "total": 16000000}
-            ],
-            "created_by": "Jane Sales",
-            "notes": "Accepted by customer",
-            "created_at": "2024-01-19 14:15:00",
-            "sent_date": "2024-01-19 16:30:00",
-            "accepted_date": "2024-01-21 09:15:00"
-        }
-    ]
-    return quotations
+    try:
+        quotations_data = await get_documents("quotations", sort=[("created_at", -1)])
+        
+        # Check for expired quotations
+        today = datetime.utcnow().date()
+        for quotation in quotations_data:
+            if quotation.get("status") in ["Draft", "Sent"]:
+                valid_until_str = quotation.get("valid_until", "")
+                if valid_until_str:
+                    try:
+                        valid_until = datetime.strptime(valid_until_str, "%Y-%m-%d").date()
+                        if valid_until < today:
+                            # Update status to Expired
+                            await update_document("quotations", quotation.get("id"), {"status": "Expired"})
+                            quotation["status"] = "Expired"
+                    except:
+                        pass
+        
+        # Convert to Quotation model format
+        quotations = []
+        for quo in quotations_data:
+            quotations.append({
+                "id": quo.get("id", ""),
+                "quotation_number": quo.get("quotation_number", ""),
+                "customer_id": quo.get("customer_id", ""),
+                "customer_name": quo.get("customer_name", ""),
+                "quotation_date": quo.get("quotation_date", ""),
+                "valid_until": quo.get("valid_until", ""),
+                "status": quo.get("status", "Draft"),
+                "total_amount": quo.get("total_amount", 0.0),
+                "items": quo.get("items", []),
+                "created_by": quo.get("created_by", ""),
+                "notes": quo.get("notes", ""),
+                "created_at": quo.get("created_at", datetime.utcnow()).isoformat() if isinstance(quo.get("created_at"), datetime) else quo.get("created_at", ""),
+                "sent_date": quo.get("sent_date"),
+                "accepted_date": quo.get("accepted_date")
+            })
+        
+        return quotations
+    except Exception as e:
+        logging.error(f"Error fetching quotations: {str(e)}")
+        return []
 
 @api_router.post("/quotations", response_model=Quotation)
 async def create_quotation(quotation: QuotationCreate):
     """Create a new quotation"""
-    new_quotation = Quotation(
-        id=f"QUO-{str(uuid.uuid4())[:8].upper()}",
-        quotation_number=f"QUO-2024-{str(uuid.uuid4())[:8].upper()}",
-        customer_id=quotation.customer_id,
-        customer_name=quotation.customer_name,
-        quotation_date=quotation.quotation_date,
-        valid_until=quotation.valid_until,
-        status="Draft",
-        total_amount=sum(item.get('total', 0) for item in quotation.items),
-        items=quotation.items,
-        created_by="Current User",
-        notes=quotation.notes,
-        created_at=datetime.utcnow().isoformat()
-    )
-    # In production, save to database
-    return new_quotation
+    try:
+        # Validate customer exists
+        customer = await get_document("customers", quotation.customer_id)
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        
+        # Validate products and calculate total
+        total_amount = 0
+        for item in quotation.items:
+            product_id = item.get("product_id")
+            if not product_id:
+                raise HTTPException(status_code=400, detail="Product ID is required for all items")
+            
+            product = await get_document("products", product_id)
+            if not product:
+                raise HTTPException(status_code=404, detail=f"Product {product_id} not found")
+            
+            # Calculate item total if not provided
+            if "total" not in item or item["total"] == 0:
+                unit_price = item.get("unit_price", product.get("price", 0))
+                quantity = item.get("quantity", 0)
+                item["total"] = unit_price * quantity
+                item["unit_price"] = unit_price
+            
+            # Add product name if not provided
+            if "product_name" not in item:
+                item["product_name"] = product.get("name", "")
+            
+            total_amount += item.get("total", 0)
+        
+        # Generate quotation number
+        year = datetime.utcnow().year
+        last_quotation = await db.quotations.find_one(
+            {"quotation_number": {"$regex": f"^QUO-{year}-"}},
+            sort=[("quotation_number", -1)]
+        )
+        
+        if last_quotation:
+            last_num = int(last_quotation.get("quotation_number", "0").split("-")[-1])
+            quotation_number = f"QUO-{year}-{str(last_num + 1).zfill(6)}"
+        else:
+            quotation_number = f"QUO-{year}-000001"
+        
+        # Prepare quotation data
+        quotation_data = {
+            "quotation_number": quotation_number,
+            "customer_id": quotation.customer_id,
+            "customer_name": quotation.customer_name or customer.get("name", ""),
+            "quotation_date": quotation.quotation_date,
+            "valid_until": quotation.valid_until,
+            "status": "Draft",
+            "total_amount": total_amount,
+            "items": quotation.items,
+            "created_by": "Current User",  # TODO: Get from auth token
+            "notes": quotation.notes or "",
+            "sent_date": None,
+            "accepted_date": None
+        }
+        
+        # Save to database
+        created_quotation = await create_document("quotations", quotation_data)
+        
+        # Return in Quotation model format
+        return Quotation(
+            id=created_quotation.get("id", ""),
+            quotation_number=created_quotation.get("quotation_number", ""),
+            customer_id=created_quotation.get("customer_id", ""),
+            customer_name=created_quotation.get("customer_name", ""),
+            quotation_date=created_quotation.get("quotation_date", ""),
+            valid_until=created_quotation.get("valid_until", ""),
+            status=created_quotation.get("status", "Draft"),
+            total_amount=created_quotation.get("total_amount", 0.0),
+            items=created_quotation.get("items", []),
+            created_by=created_quotation.get("created_by", ""),
+            notes=created_quotation.get("notes", ""),
+            created_at=created_quotation.get("created_at", datetime.utcnow()).isoformat() if isinstance(created_quotation.get("created_at"), datetime) else created_quotation.get("created_at", ""),
+            sent_date=created_quotation.get("sent_date"),
+            accepted_date=created_quotation.get("accepted_date")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error creating quotation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error creating quotation: {str(e)}")
+
+@api_router.get("/quotations/{quotation_id}", response_model=Quotation)
+async def get_quotation(quotation_id: str):
+    """Get quotation by ID"""
+    try:
+        quotation = await get_document("quotations", quotation_id)
+        if not quotation:
+            raise HTTPException(status_code=404, detail="Quotation not found")
+        
+        # Check if expired
+        if quotation.get("status") in ["Draft", "Sent"]:
+            valid_until_str = quotation.get("valid_until", "")
+            if valid_until_str:
+                try:
+                    valid_until = datetime.strptime(valid_until_str, "%Y-%m-%d").date()
+                    if valid_until < datetime.utcnow().date():
+                        await update_document("quotations", quotation_id, {"status": "Expired"})
+                        quotation["status"] = "Expired"
+                except:
+                    pass
+        
+        # Return in Quotation model format
+        return Quotation(
+            id=quotation.get("id", ""),
+            quotation_number=quotation.get("quotation_number", ""),
+            customer_id=quotation.get("customer_id", ""),
+            customer_name=quotation.get("customer_name", ""),
+            quotation_date=quotation.get("quotation_date", ""),
+            valid_until=quotation.get("valid_until", ""),
+            status=quotation.get("status", "Draft"),
+            total_amount=quotation.get("total_amount", 0.0),
+            items=quotation.get("items", []),
+            created_by=quotation.get("created_by", ""),
+            notes=quotation.get("notes", ""),
+            created_at=quotation.get("created_at", datetime.utcnow()).isoformat() if isinstance(quotation.get("created_at"), datetime) else quotation.get("created_at", ""),
+            sent_date=quotation.get("sent_date"),
+            accepted_date=quotation.get("accepted_date")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error fetching quotation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching quotation: {str(e)}")
+
+@api_router.put("/quotations/{quotation_id}", response_model=Quotation)
+async def update_quotation(quotation_id: str, quotation: QuotationCreate):
+    """Update quotation"""
+    try:
+        # Check if quotation exists
+        existing = await get_document("quotations", quotation_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Quotation not found")
+        
+        # Can't update if already accepted/rejected/expired
+        if existing.get("status") in ["Accepted", "Rejected", "Expired"]:
+            raise HTTPException(status_code=400, detail=f"Cannot update quotation with status: {existing.get('status')}")
+        
+        # Validate customer
+        customer = await get_document("customers", quotation.customer_id)
+        if not customer:
+            raise HTTPException(status_code=404, detail="Customer not found")
+        
+        # Validate products and calculate total
+        total_amount = 0
+        for item in quotation.items:
+            product_id = item.get("product_id")
+            if not product_id:
+                raise HTTPException(status_code=400, detail="Product ID is required for all items")
+            
+            product = await get_document("products", product_id)
+            if not product:
+                raise HTTPException(status_code=404, detail=f"Product {product_id} not found")
+            
+            if "total" not in item or item["total"] == 0:
+                unit_price = item.get("unit_price", product.get("price", 0))
+                quantity = item.get("quantity", 0)
+                item["total"] = unit_price * quantity
+                item["unit_price"] = unit_price
+            
+            if "product_name" not in item:
+                item["product_name"] = product.get("name", "")
+            
+            total_amount += item.get("total", 0)
+        
+        # Prepare update data
+        update_data = {
+            "customer_id": quotation.customer_id,
+            "customer_name": quotation.customer_name or customer.get("name", ""),
+            "quotation_date": quotation.quotation_date,
+            "valid_until": quotation.valid_until,
+            "total_amount": total_amount,
+            "items": quotation.items,
+            "notes": quotation.notes or ""
+        }
+        
+        # Update in database
+        updated_quotation = await update_document("quotations", quotation_id, update_data)
+        if not updated_quotation:
+            raise HTTPException(status_code=500, detail="Failed to update quotation")
+        
+        # Return in Quotation model format
+        return Quotation(
+            id=updated_quotation.get("id", ""),
+            quotation_number=updated_quotation.get("quotation_number", ""),
+            customer_id=updated_quotation.get("customer_id", ""),
+            customer_name=updated_quotation.get("customer_name", ""),
+            quotation_date=updated_quotation.get("quotation_date", ""),
+            valid_until=updated_quotation.get("valid_until", ""),
+            status=updated_quotation.get("status", "Draft"),
+            total_amount=updated_quotation.get("total_amount", 0.0),
+            items=updated_quotation.get("items", []),
+            created_by=updated_quotation.get("created_by", ""),
+            notes=updated_quotation.get("notes", ""),
+            created_at=updated_quotation.get("created_at", datetime.utcnow()).isoformat() if isinstance(updated_quotation.get("created_at"), datetime) else updated_quotation.get("created_at", ""),
+            sent_date=updated_quotation.get("sent_date"),
+            accepted_date=updated_quotation.get("accepted_date")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error updating quotation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating quotation: {str(e)}")
+
+@api_router.put("/quotations/{quotation_id}/status")
+async def update_quotation_status(quotation_id: str, status_data: dict):
+    """Update quotation status"""
+    try:
+        new_status = status_data.get("status")
+        if not new_status:
+            raise HTTPException(status_code=400, detail="Status is required")
+        
+        # Get quotation
+        quotation = await get_document("quotations", quotation_id)
+        if not quotation:
+            raise HTTPException(status_code=404, detail="Quotation not found")
+        
+        old_status = quotation.get("status", "Draft")
+        
+        # Status transitions
+        valid_transitions = {
+            "Draft": ["Sent", "Cancelled"],
+            "Sent": ["Accepted", "Rejected", "Expired"],
+            "Accepted": [],
+            "Rejected": [],
+            "Expired": [],
+            "Cancelled": []
+        }
+        
+        if new_status not in valid_transitions.get(old_status, []):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid status transition from {old_status} to {new_status}"
+            )
+        
+        # Handle status-specific logic
+        update_data = {"status": new_status}
+        
+        if new_status == "Sent":
+            update_data["sent_date"] = datetime.utcnow().isoformat()
+        elif new_status == "Accepted":
+            update_data["accepted_date"] = datetime.utcnow().isoformat()
+        
+        # Update quotation status
+        updated_quotation = await update_document("quotations", quotation_id, update_data)
+        
+        return {
+            "message": f"Quotation status updated from {old_status} to {new_status}",
+            "quotation": {
+                "id": updated_quotation.get("id", ""),
+                "quotation_number": updated_quotation.get("quotation_number", ""),
+                "status": updated_quotation.get("status", "")
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error updating quotation status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating quotation status: {str(e)}")
+
+@api_router.post("/quotations/{quotation_id}/convert-to-order")
+async def convert_quotation_to_order(quotation_id: str, order_data: dict):
+    """Convert quotation to sales order"""
+    try:
+        # Get quotation
+        quotation = await get_document("quotations", quotation_id)
+        if not quotation:
+            raise HTTPException(status_code=404, detail="Quotation not found")
+        
+        # Check if quotation can be converted
+        if quotation.get("status") != "Accepted":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot convert quotation with status: {quotation.get('status')}. Quotation must be Accepted."
+            )
+        
+        # Check if already converted
+        existing_order = await find_one_document("sales_orders", {"quotation_id": quotation_id})
+        if existing_order:
+            raise HTTPException(
+                status_code=400,
+                detail="Quotation has already been converted to sales order"
+            )
+        
+        # Get delivery date from request or use default
+        delivery_date = order_data.get("delivery_date")
+        if not delivery_date:
+            # Default: 5 days from today
+            delivery_date = (datetime.utcnow() + timedelta(days=5)).strftime("%Y-%m-%d")
+        
+        # Create sales order from quotation
+        order_create = SalesOrderCreate(
+            customer_id=quotation.get("customer_id", ""),
+            customer_name=quotation.get("customer_name", ""),
+            order_date=datetime.utcnow().strftime("%Y-%m-%d"),
+            delivery_date=delivery_date,
+            items=quotation.get("items", []),
+            notes=f"Converted from Quotation {quotation.get('quotation_number', '')}. {quotation.get('notes', '')}"
+        )
+        
+        # Create sales order
+        new_order = await create_sales_order(order_create)
+        
+        # Link quotation to order
+        await update_document("quotations", quotation_id, {
+            "sales_order_id": new_order.id,
+            "converted_at": datetime.utcnow().isoformat()
+        })
+        
+        return {
+            "message": "Quotation converted to sales order successfully",
+            "quotation": {
+                "id": quotation.get("id", ""),
+                "quotation_number": quotation.get("quotation_number", "")
+            },
+            "sales_order": {
+                "id": new_order.id,
+                "order_number": new_order.order_number
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error converting quotation to order: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error converting quotation to order: {str(e)}")
+
+@api_router.delete("/quotations/{quotation_id}")
+async def delete_quotation(quotation_id: str):
+    """Delete quotation"""
+    try:
+        # Check if quotation exists
+        existing = await get_document("quotations", quotation_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Quotation not found")
+        
+        # Can't delete if already accepted and converted
+        if existing.get("status") == "Accepted" and existing.get("sales_order_id"):
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete quotation that has been converted to sales order"
+            )
+        
+        # Delete from database
+        deleted = await delete_document("quotations", quotation_id)
+        if not deleted:
+            raise HTTPException(status_code=500, detail="Failed to delete quotation")
+        
+        return {"message": "Quotation deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error deleting quotation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error deleting quotation: {str(e)}")
 
 # PDF Generation Endpoints
 pdf_generator = PDFGenerator()
@@ -1408,96 +2366,400 @@ async def delete_vendor(vendor_id: str):
 # Purchase Invoice Endpoints
 @api_router.get("/purchase-invoices", response_model=List[PurchaseInvoice])
 async def get_purchase_invoices():
-    invoices = [
-        {
-            "id": "PI-001",
-            "invoice_number": "INV-2024-001",
-            "vendor_id": "VEND-001",
-            "vendor_name": "PT. Supplier ABC",
-            "invoice_date": "2024-01-15",
-            "due_date": "2024-02-15",
-            "amount": 25000000,
-            "paid_amount": 0,
-            "status": "Pending",
-            "description": "Purchase of raw materials",
-            "created_at": "2024-01-15 10:00:00"
-        },
-        {
-            "id": "PI-002",
-            "invoice_number": "INV-2024-002",
-            "vendor_id": "VEND-002",
-            "vendor_name": "CV. Distributor XYZ",
-            "invoice_date": "2024-01-16",
-            "due_date": "2024-02-16",
-            "amount": 15000000,
-            "paid_amount": 15000000,
-            "status": "Paid",
-            "description": "Office supplies",
-            "created_at": "2024-01-16 11:00:00"
-        }
-    ]
-    return invoices
+    """Get all purchase invoices"""
+    try:
+        invoices_data = await get_documents("purchase_invoices", sort=[("created_at", -1)])
+        
+        # Check for overdue invoices
+        today = datetime.utcnow().date()
+        for invoice in invoices_data:
+            if invoice.get("status") == "Pending":
+                due_date_str = invoice.get("due_date", "")
+                if due_date_str:
+                    try:
+                        due_date = datetime.strptime(due_date_str, "%Y-%m-%d").date()
+                        if due_date < today:
+                            await update_document("purchase_invoices", invoice.get("id"), {"status": "Overdue"})
+                            invoice["status"] = "Overdue"
+                    except:
+                        pass
+        
+        # Convert to PurchaseInvoice model format
+        invoices = []
+        for inv in invoices_data:
+            invoices.append({
+                "id": inv.get("id", ""),
+                "invoice_number": inv.get("invoice_number", ""),
+                "vendor_id": inv.get("vendor_id", ""),
+                "vendor_name": inv.get("vendor_name", ""),
+                "invoice_date": inv.get("invoice_date", ""),
+                "due_date": inv.get("due_date", ""),
+                "amount": inv.get("amount", 0.0),
+                "paid_amount": inv.get("paid_amount", 0.0),
+                "status": inv.get("status", "Pending"),
+                "description": inv.get("description", ""),
+                "created_at": inv.get("created_at", datetime.utcnow()).isoformat() if isinstance(inv.get("created_at"), datetime) else inv.get("created_at", "")
+            })
+        
+        return invoices
+    except Exception as e:
+        logging.error(f"Error fetching purchase invoices: {str(e)}")
+        return []
 
 
 @api_router.post("/purchase-invoices", response_model=PurchaseInvoice)
 async def create_purchase_invoice(pi: PurchaseInvoiceCreate):
-    new_pi = PurchaseInvoice(
-        id=f"PI-{str(uuid.uuid4())[:8].upper()}",
-        invoice_number=pi.invoice_number,
-        vendor_id=pi.vendor_id,
-        vendor_name=pi.vendor_name,
-        invoice_date=pi.invoice_date,
-        due_date=pi.due_date,
-        amount=pi.amount,
-        paid_amount=pi.paid_amount,
-        status=pi.status,
-        description=pi.description,
-        created_at=datetime.utcnow().isoformat(),
-    )
-    return new_pi
+    """Create a new purchase invoice"""
+    try:
+        # Validate vendor exists
+        vendor = await get_document("vendors", pi.vendor_id)
+        if not vendor:
+            raise HTTPException(status_code=404, detail="Vendor not found")
+        
+        # Generate invoice number if not provided
+        invoice_number = pi.invoice_number
+        if not invoice_number:
+            year = datetime.utcnow().year
+            last_invoice = await db.purchase_invoices.find_one(
+                {"invoice_number": {"$regex": f"^PINV-{year}-"}},
+                sort=[("invoice_number", -1)]
+            )
+            
+            if last_invoice:
+                last_num = int(last_invoice.get("invoice_number", "0").split("-")[-1])
+                invoice_number = f"PINV-{year}-{str(last_num + 1).zfill(6)}"
+            else:
+                invoice_number = f"PINV-{year}-000001"
+        
+        # Prepare invoice data
+        invoice_data = {
+            "invoice_number": invoice_number,
+            "vendor_id": pi.vendor_id,
+            "vendor_name": pi.vendor_name or vendor.get("name", ""),
+            "invoice_date": pi.invoice_date,
+            "due_date": pi.due_date,
+            "amount": pi.amount,
+            "paid_amount": pi.paid_amount,
+            "status": pi.status or "Pending",
+            "description": pi.description or ""
+        }
+        
+        # Save to database
+        created_invoice = await create_document("purchase_invoices", invoice_data)
+        
+        # Return in PurchaseInvoice model format
+        return PurchaseInvoice(
+            id=created_invoice.get("id", ""),
+            invoice_number=created_invoice.get("invoice_number", ""),
+            vendor_id=created_invoice.get("vendor_id", ""),
+            vendor_name=created_invoice.get("vendor_name", ""),
+            invoice_date=created_invoice.get("invoice_date", ""),
+            due_date=created_invoice.get("due_date", ""),
+            amount=created_invoice.get("amount", 0.0),
+            paid_amount=created_invoice.get("paid_amount", 0.0),
+            status=created_invoice.get("status", "Pending"),
+            description=created_invoice.get("description", ""),
+            created_at=created_invoice.get("created_at", datetime.utcnow()).isoformat() if isinstance(created_invoice.get("created_at"), datetime) else created_invoice.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error creating purchase invoice: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error creating purchase invoice: {str(e)}")
 
 
 @api_router.get("/purchase-invoices/{invoice_id}", response_model=PurchaseInvoice)
 async def get_purchase_invoice(invoice_id: str):
-    example = {
-        "id": "PI-001",
-        "invoice_number": "INV-2024-001",
-        "vendor_id": "VEND-001",
-        "vendor_name": "PT. Supplier ABC",
-        "invoice_date": "2024-01-15",
-        "due_date": "2024-02-15",
-        "amount": 25000000,
-        "paid_amount": 0,
-        "status": "Pending",
-        "description": "Purchase of raw materials",
-        "created_at": "2024-01-15 10:00:00"
-    }
-    if invoice_id != "PI-001":
-        raise HTTPException(status_code=404, detail="Purchase invoice not found")
-    return example
+    """Get purchase invoice by ID"""
+    try:
+        invoice = await get_document("purchase_invoices", invoice_id)
+        if not invoice:
+            raise HTTPException(status_code=404, detail="Purchase invoice not found")
+        
+        # Check if overdue
+        if invoice.get("status") == "Pending":
+            due_date_str = invoice.get("due_date", "")
+            if due_date_str:
+                try:
+                    due_date = datetime.strptime(due_date_str, "%Y-%m-%d").date()
+                    if due_date < datetime.utcnow().date():
+                        await update_document("purchase_invoices", invoice_id, {"status": "Overdue"})
+                        invoice["status"] = "Overdue"
+                except:
+                    pass
+        
+        # Return in PurchaseInvoice model format
+        return PurchaseInvoice(
+            id=invoice.get("id", ""),
+            invoice_number=invoice.get("invoice_number", ""),
+            vendor_id=invoice.get("vendor_id", ""),
+            vendor_name=invoice.get("vendor_name", ""),
+            invoice_date=invoice.get("invoice_date", ""),
+            due_date=invoice.get("due_date", ""),
+            amount=invoice.get("amount", 0.0),
+            paid_amount=invoice.get("paid_amount", 0.0),
+            status=invoice.get("status", "Pending"),
+            description=invoice.get("description", ""),
+            created_at=invoice.get("created_at", datetime.utcnow()).isoformat() if isinstance(invoice.get("created_at"), datetime) else invoice.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error fetching purchase invoice: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching purchase invoice: {str(e)}")
 
 
 @api_router.put("/purchase-invoices/{invoice_id}", response_model=PurchaseInvoice)
 async def update_purchase_invoice(invoice_id: str, pi: PurchaseInvoiceCreate):
-    updated = PurchaseInvoice(
-        id=invoice_id,
-        invoice_number=pi.invoice_number,
-        vendor_id=pi.vendor_id,
-        vendor_name=pi.vendor_name,
-        invoice_date=pi.invoice_date,
-        due_date=pi.due_date,
-        amount=pi.amount,
-        paid_amount=pi.paid_amount,
-        status=pi.status,
-        description=pi.description,
-        created_at=datetime.utcnow().isoformat(),
-    )
-    return updated
+    """Update purchase invoice"""
+    try:
+        # Check if invoice exists
+        existing = await get_document("purchase_invoices", invoice_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Purchase invoice not found")
+        
+        # Can't update if already paid
+        if existing.get("status") == "Paid":
+            raise HTTPException(status_code=400, detail="Cannot update paid invoice")
+        
+        # Validate vendor
+        vendor = await get_document("vendors", pi.vendor_id)
+        if not vendor:
+            raise HTTPException(status_code=404, detail="Vendor not found")
+        
+        # Prepare update data
+        update_data = {
+            "vendor_id": pi.vendor_id,
+            "vendor_name": pi.vendor_name or vendor.get("name", ""),
+            "invoice_date": pi.invoice_date,
+            "due_date": pi.due_date,
+            "amount": pi.amount,
+            "paid_amount": pi.paid_amount,
+            "status": pi.status,
+            "description": pi.description or ""
+        }
+        
+        # Update in database
+        updated_invoice = await update_document("purchase_invoices", invoice_id, update_data)
+        if not updated_invoice:
+            raise HTTPException(status_code=500, detail="Failed to update purchase invoice")
+        
+        # Return in PurchaseInvoice model format
+        return PurchaseInvoice(
+            id=updated_invoice.get("id", ""),
+            invoice_number=updated_invoice.get("invoice_number", ""),
+            vendor_id=updated_invoice.get("vendor_id", ""),
+            vendor_name=updated_invoice.get("vendor_name", ""),
+            invoice_date=updated_invoice.get("invoice_date", ""),
+            due_date=updated_invoice.get("due_date", ""),
+            amount=updated_invoice.get("amount", 0.0),
+            paid_amount=updated_invoice.get("paid_amount", 0.0),
+            status=updated_invoice.get("status", "Pending"),
+            description=updated_invoice.get("description", ""),
+            created_at=updated_invoice.get("created_at", datetime.utcnow()).isoformat() if isinstance(updated_invoice.get("created_at"), datetime) else updated_invoice.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error updating purchase invoice: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating purchase invoice: {str(e)}")
 
 
 @api_router.delete("/purchase-invoices/{invoice_id}")
 async def delete_purchase_invoice(invoice_id: str):
-    return {"message": "Purchase invoice deleted"}
+    """Delete purchase invoice"""
+    try:
+        # Check if invoice exists
+        existing = await get_document("purchase_invoices", invoice_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Purchase invoice not found")
+        
+        # Can't delete if already paid
+        if existing.get("status") == "Paid":
+            raise HTTPException(status_code=400, detail="Cannot delete paid invoice")
+        
+        # Delete from database
+        deleted = await delete_document("purchase_invoices", invoice_id)
+        if not deleted:
+            raise HTTPException(status_code=500, detail="Failed to delete purchase invoice")
+        
+        return {"message": "Purchase invoice deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error deleting purchase invoice: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error deleting purchase invoice: {str(e)}")
+
+@api_router.put("/purchase-invoices/{invoice_id}/status")
+async def update_purchase_invoice_status(invoice_id: str, status_data: dict):
+    """Update purchase invoice status with accounting integration"""
+    try:
+        new_status = status_data.get("status")
+        if not new_status:
+            raise HTTPException(status_code=400, detail="Status is required")
+        
+        # Get invoice
+        invoice = await get_document("purchase_invoices", invoice_id)
+        if not invoice:
+            raise HTTPException(status_code=404, detail="Purchase invoice not found")
+        
+        old_status = invoice.get("status", "Pending")
+        
+        # Status transitions
+        valid_transitions = {
+            "Pending": ["Paid", "Overdue", "Cancelled"],
+            "Overdue": ["Paid", "Cancelled"],
+            "Paid": [],
+            "Cancelled": []
+        }
+        
+        if new_status not in valid_transitions.get(old_status, []):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid status transition from {old_status} to {new_status}"
+            )
+        
+        # Handle status-specific logic
+        update_data = {"status": new_status}
+        
+        if new_status == "Pending" and old_status != "Pending":
+            # Post invoice - create journal entry
+            # Find or create Accounts Payable account
+            ap_account = await find_one_document("chart_of_accounts", {"account_code": "2100"})
+            if not ap_account:
+                ap_account_data = {
+                    "account_code": "2100",
+                    "account_name": "Accounts Payable",
+                    "account_type": "Liability",
+                    "normal_balance": "Credit",
+                    "balance": 0.0,
+                    "status": "Active"
+                }
+                ap_account = await create_document("chart_of_accounts", ap_account_data)
+            
+            # Find or create Purchase/Expense account
+            expense_account = await find_one_document("chart_of_accounts", {"account_code": "5100"})
+            if not expense_account:
+                expense_account_data = {
+                    "account_code": "5100",
+                    "account_name": "Purchase Expense",
+                    "account_type": "Expense",
+                    "normal_balance": "Debit",
+                    "balance": 0.0,
+                    "status": "Active"
+                }
+                expense_account = await create_document("chart_of_accounts", expense_account_data)
+            
+            # Create journal entry
+            year = datetime.utcnow().year
+            last_entry = await db.general_journal.find_one(
+                {"entry_number": {"$regex": f"^JE-{year}-"}},
+                sort=[("entry_number", -1)]
+            )
+            
+            if last_entry:
+                last_num = int(last_entry.get("entry_number", "0").split("-")[-1])
+                entry_number = f"JE-{year}-{str(last_num + 1).zfill(6)}"
+            else:
+                entry_number = f"JE-{year}-000001"
+            
+            journal_entry = {
+                "entry_number": entry_number,
+                "entry_date": invoice.get("invoice_date", datetime.utcnow().strftime("%Y-%m-%d")),
+                "description": f"Purchase Invoice {invoice.get('invoice_number', '')}",
+                "debit_account": expense_account.get("id", ""),
+                "credit_account": ap_account.get("id", ""),
+                "debit_amount": invoice.get("amount", 0.0),
+                "credit_amount": invoice.get("amount", 0.0),
+                "reference": invoice_id,
+                "status": "Posted",
+                "created_by": "System"
+            }
+            
+            await create_document("general_journal", journal_entry)
+            
+            # Update account balances
+            await update_document("chart_of_accounts", expense_account.get("id"), {
+                "balance": expense_account.get("balance", 0.0) + invoice.get("amount", 0.0)
+            })
+            await update_document("chart_of_accounts", ap_account.get("id"), {
+                "balance": ap_account.get("balance", 0.0) + invoice.get("amount", 0.0)
+            })
+        
+        elif new_status == "Paid":
+            # Record payment
+            paid_amount = status_data.get("paid_amount", invoice.get("amount", 0.0))
+            update_data["paid_amount"] = paid_amount
+            
+            # Create payment journal entry
+            # Find Cash account
+            cash_account = await find_one_document("chart_of_accounts", {"account_code": "1110"})
+            if not cash_account:
+                cash_account_data = {
+                    "account_code": "1110",
+                    "account_name": "Cash",
+                    "account_type": "Asset",
+                    "normal_balance": "Debit",
+                    "balance": 0.0,
+                    "status": "Active"
+                }
+                cash_account = await create_document("chart_of_accounts", cash_account_data)
+            
+            # Find AP account
+            ap_account = await find_one_document("chart_of_accounts", {"account_code": "2100"})
+            if ap_account:
+                year = datetime.utcnow().year
+                last_entry = await db.general_journal.find_one(
+                    {"entry_number": {"$regex": f"^JE-{year}-"}},
+                    sort=[("entry_number", -1)]
+                )
+                
+                if last_entry:
+                    last_num = int(last_entry.get("entry_number", "0").split("-")[-1])
+                    entry_number = f"JE-{year}-{str(last_num + 1).zfill(6)}"
+                else:
+                    entry_number = f"JE-{year}-000001"
+                
+                payment_entry = {
+                    "entry_number": entry_number,
+                    "entry_date": datetime.utcnow().strftime("%Y-%m-%d"),
+                    "description": f"Payment for Purchase Invoice {invoice.get('invoice_number', '')}",
+                    "debit_account": ap_account.get("id", ""),
+                    "credit_account": cash_account.get("id", ""),
+                    "debit_amount": paid_amount,
+                    "credit_amount": paid_amount,
+                    "reference": invoice_id,
+                    "status": "Posted",
+                    "created_by": "System"
+                }
+                
+                await create_document("general_journal", payment_entry)
+                
+                # Update account balances
+                await update_document("chart_of_accounts", ap_account.get("id"), {
+                    "balance": ap_account.get("balance", 0.0) - paid_amount
+                })
+                await update_document("chart_of_accounts", cash_account.get("id"), {
+                    "balance": cash_account.get("balance", 0.0) - paid_amount
+                })
+        
+        # Update invoice status
+        updated_invoice = await update_document("purchase_invoices", invoice_id, update_data)
+        
+        return {
+            "message": f"Invoice status updated from {old_status} to {new_status}",
+            "invoice": {
+                "id": updated_invoice.get("id", ""),
+                "invoice_number": updated_invoice.get("invoice_number", ""),
+                "status": updated_invoice.get("status", ""),
+                "paid_amount": updated_invoice.get("paid_amount", 0.0)
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error updating purchase invoice status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating purchase invoice status: {str(e)}")
 
 
 @api_router.get("/purchase-invoices/{invoice_id}/pdf")
@@ -1525,93 +2787,340 @@ async def generate_purchase_invoice_pdf(invoice_id: str):
 # Purchase Order Endpoints
 @api_router.get("/purchase-orders", response_model=List[PurchaseOrder])
 async def get_purchase_orders():
-    orders = [
-        {
-            "id": "PO-001",
-            "order_number": "PO-2024-001",
-            "vendor_id": "VEND-001",
-            "vendor_name": "PT. Supplier ABC",
-            "order_date": "2024-01-10",
-            "delivery_date": "2024-01-20",
-            "status": "Confirmed",
-            "total_amount": 41000000,
-            "items": [
-                {"product_id": "PRD-010", "product_name": "Bahan Baku A", "quantity": 10, "unit_price": 1000000, "total": 10000000},
-                {"product_id": "PRD-011", "product_name": "Bahan Baku B", "quantity": 7, "unit_price": 3000000, "total": 21000000}
-            ],
-            "created_by": "Procurement",
-            "notes": "Urgent",
-            "created_at": "2024-01-10 09:00:00"
-        }
-    ]
-    return orders
+    """Get all purchase orders"""
+    try:
+        orders_data = await get_documents("purchase_orders", sort=[("created_at", -1)])
+        
+        # Convert to PurchaseOrder model format
+        orders = []
+        for order in orders_data:
+            orders.append({
+                "id": order.get("id", ""),
+                "order_number": order.get("order_number", ""),
+                "vendor_id": order.get("vendor_id", ""),
+                "vendor_name": order.get("vendor_name", ""),
+                "order_date": order.get("order_date", ""),
+                "delivery_date": order.get("delivery_date", ""),
+                "status": order.get("status", "Draft"),
+                "total_amount": order.get("total_amount", 0.0),
+                "items": order.get("items", []),
+                "created_by": order.get("created_by", ""),
+                "notes": order.get("notes", ""),
+                "created_at": order.get("created_at", datetime.utcnow()).isoformat() if isinstance(order.get("created_at"), datetime) else order.get("created_at", "")
+            })
+        
+        return orders
+    except Exception as e:
+        logging.error(f"Error fetching purchase orders: {str(e)}")
+        return []
 
 
 @api_router.post("/purchase-orders", response_model=PurchaseOrder)
 async def create_purchase_order(order: PurchaseOrderCreate):
-    new_order = PurchaseOrder(
-        id=f"PO-{str(uuid.uuid4())[:8].upper()}",
-        order_number=f"PO-2024-{str(uuid.uuid4())[:6].upper()}",
-        vendor_id=order.vendor_id,
-        vendor_name=order.vendor_name,
-        order_date=order.order_date,
-        delivery_date=order.delivery_date,
-        status="Draft",
-        total_amount=sum(item.get('total', 0) for item in order.items),
-        items=order.items,
-        created_by="Current User",
-        notes=order.notes,
-        created_at=datetime.utcnow().isoformat(),
-    )
-    return new_order
+    """Create a new purchase order"""
+    try:
+        # Validate vendor exists
+        vendor = await get_document("vendors", order.vendor_id)
+        if not vendor:
+            raise HTTPException(status_code=404, detail="Vendor not found")
+        
+        # Validate products and calculate total
+        total_amount = 0
+        for item in order.items:
+            product_id = item.get("product_id")
+            quantity = item.get("quantity", 0)
+            
+            if not product_id:
+                raise HTTPException(status_code=400, detail="Product ID is required for all items")
+            
+            # Get product details (or create if doesn't exist for purchase)
+            product = await get_document("products", product_id)
+            if not product:
+                # For purchase orders, we might be buying new products
+                # So we'll allow it but log a warning
+                logging.warning(f"Product {product_id} not found, but allowing purchase order creation")
+            
+            # Calculate item total if not provided
+            if "total" not in item or item["total"] == 0:
+                unit_price = item.get("unit_price", product.get("cost", 0) if product else 0)
+                item["total"] = unit_price * quantity
+                item["unit_price"] = unit_price
+            
+            # Add product name if not provided
+            if "product_name" not in item and product:
+                item["product_name"] = product.get("name", "")
+            
+            total_amount += item.get("total", 0)
+        
+        # Generate order number
+        year = datetime.utcnow().year
+        last_order = await db.purchase_orders.find_one(
+            {"order_number": {"$regex": f"^PO-{year}-"}},
+            sort=[("order_number", -1)]
+        )
+        
+        if last_order:
+            last_num = int(last_order.get("order_number", "0").split("-")[-1])
+            order_number = f"PO-{year}-{str(last_num + 1).zfill(6)}"
+        else:
+            order_number = f"PO-{year}-000001"
+        
+        # Prepare order data
+        order_data = {
+            "order_number": order_number,
+            "vendor_id": order.vendor_id,
+            "vendor_name": order.vendor_name or vendor.get("name", ""),
+            "order_date": order.order_date,
+            "delivery_date": order.delivery_date,
+            "status": "Draft",
+            "total_amount": total_amount,
+            "items": order.items,
+            "created_by": "Current User",  # TODO: Get from auth token
+            "notes": order.notes or ""
+        }
+        
+        # Save to database
+        created_order = await create_document("purchase_orders", order_data)
+        
+        # Return in PurchaseOrder model format
+        return PurchaseOrder(
+            id=created_order.get("id", ""),
+            order_number=created_order.get("order_number", ""),
+            vendor_id=created_order.get("vendor_id", ""),
+            vendor_name=created_order.get("vendor_name", ""),
+            order_date=created_order.get("order_date", ""),
+            delivery_date=created_order.get("delivery_date", ""),
+            status=created_order.get("status", "Draft"),
+            total_amount=created_order.get("total_amount", 0.0),
+            items=created_order.get("items", []),
+            created_by=created_order.get("created_by", ""),
+            notes=created_order.get("notes", ""),
+            created_at=created_order.get("created_at", datetime.utcnow()).isoformat() if isinstance(created_order.get("created_at"), datetime) else created_order.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error creating purchase order: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error creating purchase order: {str(e)}")
 
 
 @api_router.get("/purchase-orders/{order_id}", response_model=PurchaseOrder)
 async def get_purchase_order(order_id: str):
-    example = {
-        "id": "PO-001",
-        "order_number": "PO-2024-001",
-        "vendor_id": "VEND-001",
-        "vendor_name": "PT. Supplier ABC",
-        "order_date": "2024-01-10",
-        "delivery_date": "2024-01-20",
-        "status": "Confirmed",
-        "total_amount": 41000000,
-        "items": [
-            {"product_id": "PRD-010", "product_name": "Bahan Baku A", "quantity": 10, "unit_price": 1000000, "total": 10000000},
-            {"product_id": "PRD-011", "product_name": "Bahan Baku B", "quantity": 7, "unit_price": 3000000, "total": 21000000}
-        ],
-        "created_by": "Procurement",
-        "notes": "Urgent",
-        "created_at": "2024-01-10 09:00:00"
-    }
-    if order_id != "PO-001":
-        raise HTTPException(status_code=404, detail="Purchase order not found")
-    return example
+    """Get purchase order by ID"""
+    try:
+        order = await get_document("purchase_orders", order_id)
+        if not order:
+            raise HTTPException(status_code=404, detail="Purchase order not found")
+        
+        # Return in PurchaseOrder model format
+        return PurchaseOrder(
+            id=order.get("id", ""),
+            order_number=order.get("order_number", ""),
+            vendor_id=order.get("vendor_id", ""),
+            vendor_name=order.get("vendor_name", ""),
+            order_date=order.get("order_date", ""),
+            delivery_date=order.get("delivery_date", ""),
+            status=order.get("status", "Draft"),
+            total_amount=order.get("total_amount", 0.0),
+            items=order.get("items", []),
+            created_by=order.get("created_by", ""),
+            notes=order.get("notes", ""),
+            created_at=order.get("created_at", datetime.utcnow()).isoformat() if isinstance(order.get("created_at"), datetime) else order.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error fetching purchase order: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching purchase order: {str(e)}")
 
 
 @api_router.put("/purchase-orders/{order_id}", response_model=PurchaseOrder)
 async def update_purchase_order(order_id: str, order: PurchaseOrderCreate):
-    updated = PurchaseOrder(
-        id=order_id,
-        order_number=f"PO-2024-{order_id}",
-        vendor_id=order.vendor_id,
-        vendor_name=order.vendor_name,
-        order_date=order.order_date,
-        delivery_date=order.delivery_date,
-        status="Draft",
-        total_amount=sum(item.get('total', 0) for item in order.items),
-        items=order.items,
-        created_by="Current User",
-        notes=order.notes,
-        created_at=datetime.utcnow().isoformat(),
-    )
-    return updated
+    """Update purchase order"""
+    try:
+        # Check if order exists
+        existing = await get_document("purchase_orders", order_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Purchase order not found")
+        
+        # Can't update if already confirmed/processing/received
+        if existing.get("status") in ["Confirmed", "Processing", "Received"]:
+            raise HTTPException(status_code=400, detail=f"Cannot update order with status: {existing.get('status')}")
+        
+        # Validate vendor
+        vendor = await get_document("vendors", order.vendor_id)
+        if not vendor:
+            raise HTTPException(status_code=404, detail="Vendor not found")
+        
+        # Validate products and calculate total
+        total_amount = 0
+        for item in order.items:
+            product_id = item.get("product_id")
+            if not product_id:
+                raise HTTPException(status_code=400, detail="Product ID is required for all items")
+            
+            product = await get_document("products", product_id)
+            if not product:
+                logging.warning(f"Product {product_id} not found, but allowing purchase order update")
+            
+            if "total" not in item or item["total"] == 0:
+                unit_price = item.get("unit_price", product.get("cost", 0) if product else 0)
+                quantity = item.get("quantity", 0)
+                item["total"] = unit_price * quantity
+                item["unit_price"] = unit_price
+            
+            if "product_name" not in item and product:
+                item["product_name"] = product.get("name", "")
+            
+            total_amount += item.get("total", 0)
+        
+        # Prepare update data
+        update_data = {
+            "vendor_id": order.vendor_id,
+            "vendor_name": order.vendor_name or vendor.get("name", ""),
+            "order_date": order.order_date,
+            "delivery_date": order.delivery_date,
+            "total_amount": total_amount,
+            "items": order.items,
+            "notes": order.notes or ""
+        }
+        
+        # Update in database
+        updated_order = await update_document("purchase_orders", order_id, update_data)
+        if not updated_order:
+            raise HTTPException(status_code=500, detail="Failed to update purchase order")
+        
+        # Return in PurchaseOrder model format
+        return PurchaseOrder(
+            id=updated_order.get("id", ""),
+            order_number=updated_order.get("order_number", ""),
+            vendor_id=updated_order.get("vendor_id", ""),
+            vendor_name=updated_order.get("vendor_name", ""),
+            order_date=updated_order.get("order_date", ""),
+            delivery_date=updated_order.get("delivery_date", ""),
+            status=updated_order.get("status", "Draft"),
+            total_amount=updated_order.get("total_amount", 0.0),
+            items=updated_order.get("items", []),
+            created_by=updated_order.get("created_by", ""),
+            notes=updated_order.get("notes", ""),
+            created_at=updated_order.get("created_at", datetime.utcnow()).isoformat() if isinstance(updated_order.get("created_at"), datetime) else updated_order.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error updating purchase order: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating purchase order: {str(e)}")
 
 
 @api_router.delete("/purchase-orders/{order_id}")
 async def delete_purchase_order(order_id: str):
-    return {"message": "Purchase order deleted"}
+    """Delete purchase order"""
+    try:
+        # Check if order exists
+        existing = await get_document("purchase_orders", order_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Purchase order not found")
+        
+        # Can't delete if already confirmed or beyond
+        if existing.get("status") not in ["Draft", "Cancelled"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot delete order with status: {existing.get('status')}. Cancel it first."
+            )
+        
+        # Delete from database
+        deleted = await delete_document("purchase_orders", order_id)
+        if not deleted:
+            raise HTTPException(status_code=500, detail="Failed to delete purchase order")
+        
+        return {"message": "Purchase order deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error deleting purchase order: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error deleting purchase order: {str(e)}")
+
+@api_router.put("/purchase-orders/{order_id}/status")
+async def update_purchase_order_status(order_id: str, status_data: dict):
+    """Update purchase order status with stock management"""
+    try:
+        new_status = status_data.get("status")
+        if not new_status:
+            raise HTTPException(status_code=400, detail="Status is required")
+        
+        # Get order
+        order = await get_document("purchase_orders", order_id)
+        if not order:
+            raise HTTPException(status_code=404, detail="Purchase order not found")
+        
+        old_status = order.get("status", "Draft")
+        
+        # Status transitions
+        valid_transitions = {
+            "Draft": ["Confirmed", "Cancelled"],
+            "Confirmed": ["Processing", "Cancelled"],
+            "Processing": ["Received", "Cancelled"],
+            "Received": [],
+            "Cancelled": []
+        }
+        
+        if new_status not in valid_transitions.get(old_status, []):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid status transition from {old_status} to {new_status}"
+            )
+        
+        # Handle stock updates
+        if new_status == "Received" and old_status in ["Confirmed", "Processing"]:
+            # Receive goods - increase stock
+            for item in order.get("items", []):
+                product_id = item.get("product_id")
+                quantity = item.get("quantity", 0)
+                
+                if product_id:
+                    product = await get_document("products", product_id)
+                    if product:
+                        # Update stock
+                        current_stock = product.get("stock", 0)
+                        new_stock = current_stock + quantity
+                        await update_document("products", product_id, {"stock": new_stock})
+                    else:
+                        # Product doesn't exist - create it from purchase order
+                        product_data = {
+                            "name": item.get("product_name", f"Product {product_id}"),
+                            "sku": f"SKU-{product_id}",
+                            "description": f"Purchased from {order.get('vendor_name', '')}",
+                            "category": "Purchased",
+                            "price": item.get("unit_price", 0) * 1.2,  # Add 20% margin
+                            "cost": item.get("unit_price", 0),
+                            "stock": quantity,
+                            "min_stock": 0,
+                            "max_stock": 1000,
+                            "status": "Active"
+                        }
+                        new_product = await create_document("products", product_data)
+                        logging.info(f"Created new product {new_product.get('id')} from purchase order")
+        
+        elif new_status == "Cancelled" and old_status in ["Confirmed", "Processing"]:
+            # Cancel order - no stock change needed (stock only increases on Received)
+            pass
+        
+        # Update order status
+        updated_order = await update_document("purchase_orders", order_id, {"status": new_status})
+        
+        return {
+            "message": f"Order status updated from {old_status} to {new_status}",
+            "order": {
+                "id": updated_order.get("id", ""),
+                "order_number": updated_order.get("order_number", ""),
+                "status": updated_order.get("status", "")
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error updating purchase order status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating purchase order status: {str(e)}")
 
 
 @api_router.get("/purchase-orders/{order_id}/pdf")
@@ -1870,96 +3379,317 @@ class StockOpnameCreate(BaseModel):
 
 @api_router.get("/stock-opnames", response_model=List[StockOpname])
 async def get_stock_opnames():
-    opnames = [
-        {
-            "id": "SO-001",
-            "opname_number": "SO-2024-001",
-            "opname_date": "2024-01-20",
-            "warehouse": "Main Warehouse",
-            "status": "Completed",
-            "total_items": 150,
-            "items_checked": 150,
-            "discrepancies": 5,
-            "variance_value": 2500000.0,
-            "items": [
-                {"product_id": "PRD-001", "product_name": "Laptop Gaming", "system_qty": 10, "actual_qty": 12, "variance": 2, "unit_price": 15000000, "variance_value": 30000000},
-                {"product_id": "PRD-002", "product_name": "Mouse Wireless", "system_qty": 50, "actual_qty": 48, "variance": -2, "unit_price": 250000, "variance_value": -500000}
-            ],
-            "conducted_by": "John Inventory",
-            "notes": "Monthly stock opname completed",
-            "created_at": "2024-01-20 10:30:00"
-        }
-    ]
-    return opnames
+    """Get all stock opnames"""
+    try:
+        opnames_data = await get_documents("stock_opnames", sort=[("created_at", -1)])
+        
+        # Convert to StockOpname model format
+        opnames = []
+        for opname in opnames_data:
+            opnames.append({
+                "id": opname.get("id", ""),
+                "opname_number": opname.get("opname_number", ""),
+                "opname_date": opname.get("opname_date", ""),
+                "warehouse": opname.get("warehouse", ""),
+                "status": opname.get("status", "Draft"),
+                "total_items": opname.get("total_items", 0),
+                "items_checked": opname.get("items_checked", 0),
+                "discrepancies": opname.get("discrepancies", 0),
+                "variance_value": opname.get("variance_value", 0.0),
+                "items": opname.get("items", []),
+                "conducted_by": opname.get("conducted_by", ""),
+                "notes": opname.get("notes", ""),
+                "created_at": opname.get("created_at", datetime.utcnow()).isoformat() if isinstance(opname.get("created_at"), datetime) else opname.get("created_at", "")
+            })
+        
+        return opnames
+    except Exception as e:
+        logging.error(f"Error fetching stock opnames: {str(e)}")
+        return []
 
 
 @api_router.post("/stock-opnames", response_model=StockOpname)
 async def create_stock_opname(opname: StockOpnameCreate):
-    new_opname = StockOpname(
-        id=f"SO-{str(uuid.uuid4())[:8].upper()}",
-        opname_number=f"SO-2024-{str(uuid.uuid4())[:6].upper()}",
-        opname_date=opname.opname_date,
-        warehouse=opname.warehouse,
-        status="Draft",
-        total_items=len(opname.items),
-        items_checked=0,
-        discrepancies=0,
-        variance_value=0.0,
-        items=opname.items,
-        conducted_by="Current User",
-        notes=opname.notes,
-        created_at=datetime.utcnow().isoformat(),
-    )
-    return new_opname
+    """Create a new stock opname"""
+    try:
+        # Validate products and calculate variance
+        total_items = len(opname.items)
+        items_checked = 0
+        discrepancies = 0
+        variance_value = 0.0
+        
+        for item in opname.items:
+            product_id = item.get("product_id")
+            if not product_id:
+                raise HTTPException(status_code=400, detail="Product ID is required for all items")
+            
+            product = await get_document("products", product_id)
+            if not product:
+                raise HTTPException(status_code=404, detail=f"Product {product_id} not found")
+            
+            # Get system quantity
+            system_qty = product.get("stock", 0)
+            actual_qty = item.get("actual_qty", system_qty)
+            
+            # Calculate variance
+            variance = actual_qty - system_qty
+            item["system_qty"] = system_qty
+            item["variance"] = variance
+            
+            # Calculate variance value
+            unit_price = item.get("unit_price", product.get("cost", 0))
+            item["unit_price"] = unit_price
+            item["variance_value"] = variance * unit_price
+            
+            # Add product name if not provided
+            if "product_name" not in item:
+                item["product_name"] = product.get("name", "")
+            
+            items_checked += 1
+            if variance != 0:
+                discrepancies += 1
+                variance_value += item["variance_value"]
+        
+        # Generate opname number
+        year = datetime.utcnow().year
+        last_opname = await db.stock_opnames.find_one(
+            {"opname_number": {"$regex": f"^OPN-{year}-"}},
+            sort=[("opname_number", -1)]
+        )
+        
+        if last_opname:
+            last_num = int(last_opname.get("opname_number", "0").split("-")[-1])
+            opname_number = f"OPN-{year}-{str(last_num + 1).zfill(6)}"
+        else:
+            opname_number = f"OPN-{year}-000001"
+        
+        # Prepare opname data
+        opname_data = {
+            "opname_number": opname_number,
+            "opname_date": opname.opname_date,
+            "warehouse": opname.warehouse,
+            "status": "Draft",
+            "total_items": total_items,
+            "items_checked": items_checked,
+            "discrepancies": discrepancies,
+            "variance_value": variance_value,
+            "items": opname.items,
+            "conducted_by": "Current User",  # TODO: Get from auth token
+            "notes": opname.notes or ""
+        }
+        
+        # Save to database
+        created_opname = await create_document("stock_opnames", opname_data)
+        
+        # Return in StockOpname model format
+        return StockOpname(
+            id=created_opname.get("id", ""),
+            opname_number=created_opname.get("opname_number", ""),
+            opname_date=created_opname.get("opname_date", ""),
+            warehouse=created_opname.get("warehouse", ""),
+            status=created_opname.get("status", "Draft"),
+            total_items=created_opname.get("total_items", 0),
+            items_checked=created_opname.get("items_checked", 0),
+            discrepancies=created_opname.get("discrepancies", 0),
+            variance_value=created_opname.get("variance_value", 0.0),
+            items=created_opname.get("items", []),
+            conducted_by=created_opname.get("conducted_by", ""),
+            notes=created_opname.get("notes", ""),
+            created_at=created_opname.get("created_at", datetime.utcnow()).isoformat() if isinstance(created_opname.get("created_at"), datetime) else created_opname.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error creating stock opname: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error creating stock opname: {str(e)}")
 
 
 @api_router.get("/stock-opnames/{opname_id}", response_model=StockOpname)
 async def get_stock_opname(opname_id: str):
-    example = {
-        "id": "SO-001",
-        "opname_number": "SO-2024-001",
-        "opname_date": "2024-01-20",
-        "warehouse": "Main Warehouse",
-        "status": "Completed",
-        "total_items": 150,
-        "items_checked": 150,
-        "discrepancies": 5,
-        "variance_value": 2500000.0,
-        "items": [
-            {"product_id": "PRD-001", "product_name": "Laptop Gaming", "system_qty": 10, "actual_qty": 12, "variance": 2, "unit_price": 15000000, "variance_value": 30000000}
-        ],
-        "conducted_by": "John Inventory",
-        "notes": "Monthly stock opname completed",
-        "created_at": "2024-01-20 10:30:00"
-    }
-    if opname_id != "SO-001":
-        raise HTTPException(status_code=404, detail="Stock opname not found")
-    return example
+    """Get stock opname by ID"""
+    try:
+        opname = await get_document("stock_opnames", opname_id)
+        if not opname:
+            raise HTTPException(status_code=404, detail="Stock opname not found")
+        
+        # Return in StockOpname model format
+        return StockOpname(
+            id=opname.get("id", ""),
+            opname_number=opname.get("opname_number", ""),
+            opname_date=opname.get("opname_date", ""),
+            warehouse=opname.get("warehouse", ""),
+            status=opname.get("status", "Draft"),
+            total_items=opname.get("total_items", 0),
+            items_checked=opname.get("items_checked", 0),
+            discrepancies=opname.get("discrepancies", 0),
+            variance_value=opname.get("variance_value", 0.0),
+            items=opname.get("items", []),
+            conducted_by=opname.get("conducted_by", ""),
+            notes=opname.get("notes", ""),
+            created_at=opname.get("created_at", datetime.utcnow()).isoformat() if isinstance(opname.get("created_at"), datetime) else opname.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error fetching stock opname: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching stock opname: {str(e)}")
 
 
 @api_router.put("/stock-opnames/{opname_id}", response_model=StockOpname)
 async def update_stock_opname(opname_id: str, opname: StockOpnameCreate):
-    updated = StockOpname(
-        id=opname_id,
-        opname_number=f"SO-2024-{opname_id}",
-        opname_date=opname.opname_date,
-        warehouse=opname.warehouse,
-        status="Draft",
-        total_items=len(opname.items),
-        items_checked=0,
-        discrepancies=0,
-        variance_value=0.0,
-        items=opname.items,
-        conducted_by="Current User",
-        notes=opname.notes,
-        created_at=datetime.utcnow().isoformat(),
-    )
-    return updated
+    """Update stock opname"""
+    try:
+        # Check if opname exists
+        existing = await get_document("stock_opnames", opname_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Stock opname not found")
+        
+        # Can't update if already completed
+        if existing.get("status") == "Completed":
+            raise HTTPException(status_code=400, detail="Cannot update completed stock opname")
+        
+        # Validate products and recalculate variance
+        total_items = len(opname.items)
+        items_checked = 0
+        discrepancies = 0
+        variance_value = 0.0
+        
+        for item in opname.items:
+            product_id = item.get("product_id")
+            if not product_id:
+                raise HTTPException(status_code=400, detail="Product ID is required for all items")
+            
+            product = await get_document("products", product_id)
+            if not product:
+                raise HTTPException(status_code=404, detail=f"Product {product_id} not found")
+            
+            system_qty = product.get("stock", 0)
+            actual_qty = item.get("actual_qty", system_qty)
+            
+            variance = actual_qty - system_qty
+            item["system_qty"] = system_qty
+            item["variance"] = variance
+            
+            unit_price = item.get("unit_price", product.get("cost", 0))
+            item["unit_price"] = unit_price
+            item["variance_value"] = variance * unit_price
+            
+            if "product_name" not in item:
+                item["product_name"] = product.get("name", "")
+            
+            items_checked += 1
+            if variance != 0:
+                discrepancies += 1
+                variance_value += item["variance_value"]
+        
+        # Prepare update data
+        update_data = {
+            "opname_date": opname.opname_date,
+            "warehouse": opname.warehouse,
+            "total_items": total_items,
+            "items_checked": items_checked,
+            "discrepancies": discrepancies,
+            "variance_value": variance_value,
+            "items": opname.items,
+            "notes": opname.notes or ""
+        }
+        
+        # Update in database
+        updated_opname = await update_document("stock_opnames", opname_id, update_data)
+        if not updated_opname:
+            raise HTTPException(status_code=500, detail="Failed to update stock opname")
+        
+        # Return in StockOpname model format
+        return StockOpname(
+            id=updated_opname.get("id", ""),
+            opname_number=updated_opname.get("opname_number", ""),
+            opname_date=updated_opname.get("opname_date", ""),
+            warehouse=updated_opname.get("warehouse", ""),
+            status=updated_opname.get("status", "Draft"),
+            total_items=updated_opname.get("total_items", 0),
+            items_checked=updated_opname.get("items_checked", 0),
+            discrepancies=updated_opname.get("discrepancies", 0),
+            variance_value=updated_opname.get("variance_value", 0.0),
+            items=updated_opname.get("items", []),
+            conducted_by=updated_opname.get("conducted_by", ""),
+            notes=updated_opname.get("notes", ""),
+            created_at=updated_opname.get("created_at", datetime.utcnow()).isoformat() if isinstance(updated_opname.get("created_at"), datetime) else updated_opname.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error updating stock opname: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating stock opname: {str(e)}")
 
 
 @api_router.delete("/stock-opnames/{opname_id}")
 async def delete_stock_opname(opname_id: str):
-    return {"message": "Stock opname deleted"}
+    """Delete stock opname"""
+    try:
+        # Check if opname exists
+        existing = await get_document("stock_opnames", opname_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Stock opname not found")
+        
+        # Can't delete if already completed
+        if existing.get("status") == "Completed":
+            raise HTTPException(status_code=400, detail="Cannot delete completed stock opname")
+        
+        # Delete from database
+        deleted = await delete_document("stock_opnames", opname_id)
+        if not deleted:
+            raise HTTPException(status_code=500, detail="Failed to delete stock opname")
+        
+        return {"message": "Stock opname deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error deleting stock opname: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error deleting stock opname: {str(e)}")
+
+@api_router.put("/stock-opnames/{opname_id}/complete")
+async def complete_stock_opname(opname_id: str):
+    """Complete stock opname and adjust stock"""
+    try:
+        # Get opname
+        opname = await get_document("stock_opnames", opname_id)
+        if not opname:
+            raise HTTPException(status_code=404, detail="Stock opname not found")
+        
+        if opname.get("status") == "Completed":
+            raise HTTPException(status_code=400, detail="Stock opname already completed")
+        
+        # Adjust stock for each item with variance
+        for item in opname.get("items", []):
+            product_id = item.get("product_id")
+            variance = item.get("variance", 0)
+            
+            if variance != 0 and product_id:
+                product = await get_document("products", product_id)
+                if product:
+                    current_stock = product.get("stock", 0)
+                    new_stock = current_stock + variance  # variance can be positive or negative
+                    await update_document("products", product_id, {"stock": new_stock})
+                    logging.info(f"Adjusted stock for {product.get('name', product_id)}: {current_stock} -> {new_stock}")
+        
+        # Update opname status to Completed
+        updated_opname = await update_document("stock_opnames", opname_id, {"status": "Completed"})
+        
+        return {
+            "message": "Stock opname completed and stock adjusted",
+            "opname": {
+                "id": updated_opname.get("id", ""),
+                "opname_number": updated_opname.get("opname_number", ""),
+                "status": updated_opname.get("status", ""),
+                "discrepancies": updated_opname.get("discrepancies", 0),
+                "variance_value": updated_opname.get("variance_value", 0.0)
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error completing stock opname: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error completing stock opname: {str(e)}")
 
 
 # =============================
@@ -1998,98 +3728,335 @@ class StockTransferCreate(BaseModel):
 
 @api_router.get("/stock-transfers", response_model=List[StockTransfer])
 async def get_stock_transfers():
-    transfers = [
-        {
-            "id": "ST-001",
-            "transfer_number": "ST-2024-001",
-            "transfer_date": "2024-01-20",
-            "from_warehouse": "Main Warehouse",
-            "to_warehouse": "Secondary Warehouse",
-            "status": "Completed",
-            "total_items": 3,
-            "total_value": 45000000.0,
-            "items": [
-                {"product_id": "PRD-001", "product_name": "Laptop Gaming", "quantity": 2, "unit_price": 15000000, "total": 30000000},
-                {"product_id": "PRD-002", "product_name": "Mouse Wireless", "quantity": 10, "unit_price": 250000, "total": 2500000}
-            ],
-            "reason": "Stock redistribution",
-            "requested_by": "John Inventory",
-            "approved_by": "Jane Manager",
-            "notes": "Transfer completed successfully",
-            "created_at": "2024-01-20 10:30:00"
-        }
-    ]
-    return transfers
+    """Get all stock transfers"""
+    try:
+        transfers_data = await get_documents("stock_transfers", sort=[("created_at", -1)])
+        
+        # Convert to StockTransfer model format
+        transfers = []
+        for transfer in transfers_data:
+            transfers.append({
+                "id": transfer.get("id", ""),
+                "transfer_number": transfer.get("transfer_number", ""),
+                "transfer_date": transfer.get("transfer_date", ""),
+                "from_warehouse": transfer.get("from_warehouse", ""),
+                "to_warehouse": transfer.get("to_warehouse", ""),
+                "status": transfer.get("status", "Draft"),
+                "total_items": transfer.get("total_items", len(transfer.get("items", []))),
+                "total_value": transfer.get("total_value", 0.0),
+                "items": transfer.get("items", []),
+                "reason": transfer.get("reason", ""),
+                "requested_by": transfer.get("requested_by", ""),
+                "approved_by": transfer.get("approved_by"),
+                "notes": transfer.get("notes", ""),
+                "created_at": transfer.get("created_at", datetime.utcnow()).isoformat() if isinstance(transfer.get("created_at"), datetime) else transfer.get("created_at", "")
+            })
+        
+        return transfers
+    except Exception as e:
+        logging.error(f"Error fetching stock transfers: {str(e)}")
+        return []
 
 
 @api_router.post("/stock-transfers", response_model=StockTransfer)
 async def create_stock_transfer(transfer: StockTransferCreate):
-    new_transfer = StockTransfer(
-        id=f"ST-{str(uuid.uuid4())[:8].upper()}",
-        transfer_number=f"ST-2024-{str(uuid.uuid4())[:6].upper()}",
-        transfer_date=transfer.transfer_date,
-        from_warehouse=transfer.from_warehouse,
-        to_warehouse=transfer.to_warehouse,
-        status="Draft",
-        total_items=len(transfer.items),
-        total_value=sum(item.get('total', 0) for item in transfer.items),
-        items=transfer.items,
-        reason=transfer.reason,
-        requested_by="Current User",
-        notes=transfer.notes,
-        created_at=datetime.utcnow().isoformat(),
-    )
-    return new_transfer
+    """Create a new stock transfer"""
+    try:
+        # Validate products and check stock availability
+        total_value = 0.0
+        for item in transfer.items:
+            product_id = item.get("product_id")
+            quantity = item.get("quantity", 0)
+            
+            if not product_id:
+                raise HTTPException(status_code=400, detail="Product ID is required for all items")
+            
+            if quantity <= 0:
+                raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
+            
+            product = await get_document("products", product_id)
+            if not product:
+                raise HTTPException(status_code=404, detail=f"Product {product_id} not found")
+            
+            # Check stock availability
+            current_stock = product.get("stock", 0)
+            if current_stock < quantity:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Insufficient stock for product {product.get('name', product_id)}. Available: {current_stock}, Required: {quantity}"
+                )
+            
+            # Calculate item value
+            unit_price = item.get("unit_price", product.get("cost", 0))
+            item["unit_price"] = unit_price
+            item["total"] = unit_price * quantity
+            total_value += item["total"]
+            
+            # Add product name if not provided
+            if "product_name" not in item:
+                item["product_name"] = product.get("name", "")
+        
+        # Generate transfer number
+        year = datetime.utcnow().year
+        last_transfer = await db.stock_transfers.find_one(
+            {"transfer_number": {"$regex": f"^STR-{year}-"}},
+            sort=[("transfer_number", -1)]
+        )
+        
+        if last_transfer:
+            last_num = int(last_transfer.get("transfer_number", "0").split("-")[-1])
+            transfer_number = f"STR-{year}-{str(last_num + 1).zfill(6)}"
+        else:
+            transfer_number = f"STR-{year}-000001"
+        
+        # Prepare transfer data
+        transfer_data = {
+            "transfer_number": transfer_number,
+            "transfer_date": transfer.transfer_date,
+            "from_warehouse": transfer.from_warehouse,
+            "to_warehouse": transfer.to_warehouse,
+            "status": "Draft",
+            "total_items": len(transfer.items),
+            "total_value": total_value,
+            "items": transfer.items,
+            "reason": transfer.reason,
+            "requested_by": "Current User",  # TODO: Get from auth token
+            "approved_by": None,
+            "notes": transfer.notes or ""
+        }
+        
+        # Save to database
+        created_transfer = await create_document("stock_transfers", transfer_data)
+        
+        # Return in StockTransfer model format
+        return StockTransfer(
+            id=created_transfer.get("id", ""),
+            transfer_number=created_transfer.get("transfer_number", ""),
+            transfer_date=created_transfer.get("transfer_date", ""),
+            from_warehouse=created_transfer.get("from_warehouse", ""),
+            to_warehouse=created_transfer.get("to_warehouse", ""),
+            status=created_transfer.get("status", "Draft"),
+            total_items=created_transfer.get("total_items", 0),
+            total_value=created_transfer.get("total_value", 0.0),
+            items=created_transfer.get("items", []),
+            reason=created_transfer.get("reason", ""),
+            requested_by=created_transfer.get("requested_by", ""),
+            approved_by=created_transfer.get("approved_by"),
+            notes=created_transfer.get("notes", ""),
+            created_at=created_transfer.get("created_at", datetime.utcnow()).isoformat() if isinstance(created_transfer.get("created_at"), datetime) else created_transfer.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error creating stock transfer: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error creating stock transfer: {str(e)}")
 
 
 @api_router.get("/stock-transfers/{transfer_id}", response_model=StockTransfer)
 async def get_stock_transfer(transfer_id: str):
-    example = {
-        "id": "ST-001",
-        "transfer_number": "ST-2024-001",
-        "transfer_date": "2024-01-20",
-        "from_warehouse": "Main Warehouse",
-        "to_warehouse": "Secondary Warehouse",
-        "status": "Completed",
-        "total_items": 3,
-        "total_value": 45000000.0,
-        "items": [
-            {"product_id": "PRD-001", "product_name": "Laptop Gaming", "quantity": 2, "unit_price": 15000000, "total": 30000000}
-        ],
-        "reason": "Stock redistribution",
-        "requested_by": "John Inventory",
-        "approved_by": "Jane Manager",
-        "notes": "Transfer completed successfully",
-        "created_at": "2024-01-20 10:30:00"
-    }
-    if transfer_id != "ST-001":
-        raise HTTPException(status_code=404, detail="Stock transfer not found")
-    return example
+    """Get stock transfer by ID"""
+    try:
+        transfer = await get_document("stock_transfers", transfer_id)
+        if not transfer:
+            raise HTTPException(status_code=404, detail="Stock transfer not found")
+        
+        # Return in StockTransfer model format
+        return StockTransfer(
+            id=transfer.get("id", ""),
+            transfer_number=transfer.get("transfer_number", ""),
+            transfer_date=transfer.get("transfer_date", ""),
+            from_warehouse=transfer.get("from_warehouse", ""),
+            to_warehouse=transfer.get("to_warehouse", ""),
+            status=transfer.get("status", "Draft"),
+            total_items=transfer.get("total_items", 0),
+            total_value=transfer.get("total_value", 0.0),
+            items=transfer.get("items", []),
+            reason=transfer.get("reason", ""),
+            requested_by=transfer.get("requested_by", ""),
+            approved_by=transfer.get("approved_by"),
+            notes=transfer.get("notes", ""),
+            created_at=transfer.get("created_at", datetime.utcnow()).isoformat() if isinstance(transfer.get("created_at"), datetime) else transfer.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error fetching stock transfer: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching stock transfer: {str(e)}")
 
 
 @api_router.put("/stock-transfers/{transfer_id}", response_model=StockTransfer)
 async def update_stock_transfer(transfer_id: str, transfer: StockTransferCreate):
-    updated = StockTransfer(
-        id=transfer_id,
-        transfer_number=f"ST-2024-{transfer_id}",
-        transfer_date=transfer.transfer_date,
-        from_warehouse=transfer.from_warehouse,
-        to_warehouse=transfer.to_warehouse,
-        status="Draft",
-        total_items=len(transfer.items),
-        total_value=sum(item.get('total', 0) for item in transfer.items),
-        items=transfer.items,
-        reason=transfer.reason,
-        requested_by="Current User",
-        notes=transfer.notes,
-        created_at=datetime.utcnow().isoformat(),
-    )
-    return updated
+    """Update stock transfer"""
+    try:
+        # Check if transfer exists
+        existing = await get_document("stock_transfers", transfer_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Stock transfer not found")
+        
+        # Can't update if already completed
+        if existing.get("status") == "Completed":
+            raise HTTPException(status_code=400, detail="Cannot update completed stock transfer")
+        
+        # Validate products and check stock
+        total_value = 0.0
+        for item in transfer.items:
+            product_id = item.get("product_id")
+            quantity = item.get("quantity", 0)
+            
+            if not product_id:
+                raise HTTPException(status_code=400, detail="Product ID is required for all items")
+            
+            if quantity <= 0:
+                raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
+            
+            product = await get_document("products", product_id)
+            if not product:
+                raise HTTPException(status_code=404, detail=f"Product {product_id} not found")
+            
+            # Check stock (for existing items, add back the quantity that was reserved)
+            current_stock = product.get("stock", 0)
+            existing_item = next((i for i in existing.get("items", []) if i.get("product_id") == product_id), None)
+            if existing_item:
+                reserved_qty = existing_item.get("quantity", 0)
+                available_stock = current_stock + reserved_qty
+                if available_stock < quantity:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Insufficient stock for product {product.get('name', product_id)}. Available: {available_stock}, Required: {quantity}"
+                    )
+            else:
+                if current_stock < quantity:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Insufficient stock for product {product.get('name', product_id)}. Available: {current_stock}, Required: {quantity}"
+                    )
+            
+            unit_price = item.get("unit_price", product.get("cost", 0))
+            item["unit_price"] = unit_price
+            item["total"] = unit_price * quantity
+            total_value += item["total"]
+            
+            if "product_name" not in item:
+                item["product_name"] = product.get("name", "")
+        
+        # Prepare update data
+        update_data = {
+            "transfer_date": transfer.transfer_date,
+            "from_warehouse": transfer.from_warehouse,
+            "to_warehouse": transfer.to_warehouse,
+            "total_items": len(transfer.items),
+            "total_value": total_value,
+            "items": transfer.items,
+            "reason": transfer.reason,
+            "notes": transfer.notes or ""
+        }
+        
+        # Update in database
+        updated_transfer = await update_document("stock_transfers", transfer_id, update_data)
+        if not updated_transfer:
+            raise HTTPException(status_code=500, detail="Failed to update stock transfer")
+        
+        # Return in StockTransfer model format
+        return StockTransfer(
+            id=updated_transfer.get("id", ""),
+            transfer_number=updated_transfer.get("transfer_number", ""),
+            transfer_date=updated_transfer.get("transfer_date", ""),
+            from_warehouse=updated_transfer.get("from_warehouse", ""),
+            to_warehouse=updated_transfer.get("to_warehouse", ""),
+            status=updated_transfer.get("status", "Draft"),
+            total_items=updated_transfer.get("total_items", 0),
+            total_value=updated_transfer.get("total_value", 0.0),
+            items=updated_transfer.get("items", []),
+            reason=updated_transfer.get("reason", ""),
+            requested_by=updated_transfer.get("requested_by", ""),
+            approved_by=updated_transfer.get("approved_by"),
+            notes=updated_transfer.get("notes", ""),
+            created_at=updated_transfer.get("created_at", datetime.utcnow()).isoformat() if isinstance(updated_transfer.get("created_at"), datetime) else updated_transfer.get("created_at", "")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error updating stock transfer: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating stock transfer: {str(e)}")
 
 
 @api_router.delete("/stock-transfers/{transfer_id}")
 async def delete_stock_transfer(transfer_id: str):
-    return {"message": "Stock transfer deleted"}
+    """Delete stock transfer"""
+    try:
+        # Check if transfer exists
+        existing = await get_document("stock_transfers", transfer_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Stock transfer not found")
+        
+        # Can't delete if already completed
+        if existing.get("status") == "Completed":
+            raise HTTPException(status_code=400, detail="Cannot delete completed stock transfer")
+        
+        # Delete from database
+        deleted = await delete_document("stock_transfers", transfer_id)
+        if not deleted:
+            raise HTTPException(status_code=500, detail="Failed to delete stock transfer")
+        
+        return {"message": "Stock transfer deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error deleting stock transfer: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error deleting stock transfer: {str(e)}")
+
+@api_router.put("/stock-transfers/{transfer_id}/complete")
+async def complete_stock_transfer(transfer_id: str):
+    """Complete stock transfer and update warehouse stock"""
+    try:
+        # Get transfer
+        transfer = await get_document("stock_transfers", transfer_id)
+        if not transfer:
+            raise HTTPException(status_code=404, detail="Stock transfer not found")
+        
+        if transfer.get("status") == "Completed":
+            raise HTTPException(status_code=400, detail="Stock transfer already completed")
+        
+        # Update stock for each item
+        for item in transfer.get("items", []):
+            product_id = item.get("product_id")
+            quantity = item.get("quantity", 0)
+            
+            if product_id and quantity > 0:
+                product = await get_document("products", product_id)
+                if product:
+                    current_stock = product.get("stock", 0)
+                    
+                    # Decrease stock from source warehouse (from_warehouse)
+                    # For now, we use main stock - in future, can implement warehouse-specific stock
+                    if current_stock >= quantity:
+                        new_stock = current_stock - quantity
+                        await update_document("products", product_id, {"stock": new_stock})
+                        logging.info(f"Transferred {quantity} units of {product.get('name', product_id)} from {transfer.get('from_warehouse')} to {transfer.get('to_warehouse')}")
+                    else:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Insufficient stock for product {product.get('name', product_id)}. Available: {current_stock}, Required: {quantity}"
+                        )
+        
+        # Update transfer status to Completed
+        updated_transfer = await update_document("stock_transfers", transfer_id, {"status": "Completed"})
+        
+        return {
+            "message": "Stock transfer completed",
+            "transfer": {
+                "id": updated_transfer.get("id", ""),
+                "transfer_number": updated_transfer.get("transfer_number", ""),
+                "status": updated_transfer.get("status", ""),
+                "from_warehouse": updated_transfer.get("from_warehouse", ""),
+                "to_warehouse": updated_transfer.get("to_warehouse", "")
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error completing stock transfer: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error completing stock transfer: {str(e)}")
 
 
 # =============================
